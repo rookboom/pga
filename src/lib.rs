@@ -51,41 +51,6 @@ impl BitAnd<Point> for Option<Line> {
     }
 }
 
-// // Wedge
-// // The outer product. (MEET)
-// impl BitXor<Point> for Line {
-//     type Output = Option<Point>;
-
-//     fn bitxor(self, b: Point) -> Option<Point> {
-//         let obj = self.0 ^ b.0;
-//         if obj == PGA3D::zero() {
-//             None
-//         } else {
-//             Some(Point(obj))
-//         }
-//     }
-// }
-
-// // Wedge
-// // The outer product. (MEET)
-// impl BitXor<Point> for Option<Line> {
-//     type Output = Option<Plane>;
-
-//     fn bitxor(self, b: Point) -> Option<Plane> {
-//         match self {
-//             Some(line) => {
-//                 let obj = line.0 ^ b.0;
-//                 if obj == PGA3D::zero() {
-//                     None
-//                 } else {
-//                     Some(Plane(obj))
-//                 }
-//             }
-//             None => None,
-//         }
-//     }
-// }
-
 // Wedge
 // The outer product. (MEET)
 impl BitXor for Plane {
