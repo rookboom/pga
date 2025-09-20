@@ -22,7 +22,7 @@ const basis_count: usize = basis.len();
 
 #[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub(crate) struct PGA3D {
-    mvec: [float_t; basis_count],
+    pub(crate) mvec: [float_t; basis_count],
 }
 
 impl PGA3D {
@@ -37,24 +37,31 @@ impl PGA3D {
         ret.mvec[idx] = f;
         ret
     }
+
+    pub const fn with(self, idx: usize, value: float_t) -> Self {
+        let mut ret = self;
+        ret.mvec[idx] = value;
+        ret
+    }
 }
 
 // basis vectors are available as global constants.
-const e0: PGA3D = PGA3D::new(1.0, 1);
-const e1: PGA3D = PGA3D::new(1.0, 2);
-const e2: PGA3D = PGA3D::new(1.0, 3);
-const e3: PGA3D = PGA3D::new(1.0, 4);
-const e01: PGA3D = PGA3D::new(1.0, 5);
-const e02: PGA3D = PGA3D::new(1.0, 6);
-const e03: PGA3D = PGA3D::new(1.0, 7);
-const e12: PGA3D = PGA3D::new(1.0, 8);
-const e31: PGA3D = PGA3D::new(1.0, 9);
-const e23: PGA3D = PGA3D::new(1.0, 10);
-const e021: PGA3D = PGA3D::new(1.0, 11);
-const e013: PGA3D = PGA3D::new(1.0, 12);
-const e032: PGA3D = PGA3D::new(1.0, 13);
-const e123: PGA3D = PGA3D::new(1.0, 14);
-const e0123: PGA3D = PGA3D::new(1.0, 15);
+pub const e0: PGA3D = PGA3D::new(1.0, 1); // Scalar
+pub const e1: PGA3D = PGA3D::new(1.0, 2); // Plane with normal in X direction
+pub const e2: PGA3D = PGA3D::new(1.0, 3); // Plane with normal in Y direction
+pub const e3: PGA3D = PGA3D::new(1.0, 4); // Plane with normal in Z direction
+pub const e01: PGA3D = PGA3D::new(1.0, 5); // Moment around X-axis
+pub const e02: PGA3D = PGA3D::new(1.0, 6); // Moment around Y-axis
+pub const e03: PGA3D = PGA3D::new(1.0, 7); // Moment around Z-axis
+pub const e12: PGA3D = PGA3D::new(1.0, 8); // Dir Z
+pub const e31: PGA3D = PGA3D::new(1.0, 9); // Dir Y
+pub const e23: PGA3D = PGA3D::new(1.0, 10); // Dir X
+pub const e021: PGA3D = PGA3D::new(1.0, 11); // Z
+pub const e013: PGA3D = PGA3D::new(1.0, 12); // Y
+pub const e032: PGA3D = PGA3D::new(1.0, 13); // X
+pub const e123: PGA3D = PGA3D::new(1.0, 14); // Point at origin / infinity if zero
+pub const e0123: PGA3D = PGA3D::new(1.0, 15); // Pseudoscalar
+pub const I: PGA3D = e0123; // Pseudoscalar
 
 impl Index<usize> for PGA3D {
     type Output = float_t;
@@ -818,6 +825,11 @@ impl PGA3D {
     // A point is just a homogeneous point, euclidean coordinates plus the origin
     pub fn point(x: float_t, y: float_t, z: float_t) -> Self {
         Self::e123() + x * Self::e032() + y * Self::e013() + z * Self::e021()
+    }
+
+    // A direction is just a homogeneous point, euclidean coordinates without the origin
+    pub fn direction(x: float_t, y: float_t, z: float_t) -> Self {
+        x * Self::e032() + y * Self::e013() + z * Self::e021()
     }
 
     // for our toy problem (generate points on the surface of a torus)

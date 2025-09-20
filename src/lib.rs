@@ -1,8 +1,12 @@
+mod incidence;
 mod pga3d;
+mod reject;
 
-use std::ops::{BitAnd, BitXor};
+use std::ops::Neg;
 
 use pga3d::PGA3D;
+
+use crate::pga3d::{I, e1, e2, e3, e032, e0123, e123};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Point(PGA3D);
@@ -10,82 +14,18 @@ pub struct Point(PGA3D);
 pub struct Direction(PGA3D);
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Line(PGA3D);
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Plane(PGA3D);
 
 impl Point {
+    const origin: Point = Point(pga3d::e123);
+    const x1: Point = Point(pga3d::e123.with(13, 1.0));
+    const y1: Point = Point(pga3d::e123.with(12, 1.0));
+    const z1: Point = Point(pga3d::e123.with(11, 1.0));
+
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         Point(PGA3D::point(x, y, z))
-    }
-}
-
-// Join
-impl BitAnd for Point {
-    type Output = Option<Line>;
-
-    fn bitand(self, b: Point) -> Option<Line> {
-        let obj = self.0 & b.0;
-        if obj == PGA3D::zero() {
-            None
-        } else {
-            Some(Line(obj))
-        }
-    }
-}
-// Join
-impl BitAnd<Point> for Option<Line> {
-    type Output = Option<Plane>;
-
-    fn bitand(self, b: Point) -> Option<Plane> {
-        match self {
-            Some(line) => {
-                let obj = line.0 & b.0;
-                if obj == PGA3D::zero() {
-                    None
-                } else {
-                    Some(Plane(obj))
-                }
-            }
-            None => None,
-        }
-    }
-}
-
-// Wedge
-// The outer product. (MEET)
-impl BitXor for Plane {
-    type Output = Option<Line>;
-
-    fn bitxor(self, b: Plane) -> Option<Line> {
-        let obj = self.0 ^ b.0;
-        if obj == PGA3D::zero() {
-            None
-        } else {
-            Some(Line(obj))
-        }
-    }
-}
-
-// Wedge
-// The outer product. (MEET)
-impl BitXor<Plane> for Option<Line> {
-    type Output = Option<Point>;
-
-    fn bitxor(self, b: Plane) -> Option<Point> {
-        match self {
-            Some(line) => Some(Point(line.0 ^ b.0)),
-            None => None,
-        }
-    }
-}
-
-// Wedge
-// The outer product. (MEET)
-impl BitXor<Line> for Plane {
-    type Output = Point;
-
-    fn bitxor(self, b: Line) -> Point {
-        Point(self.0 ^ b.0)
     }
 }
 
@@ -93,8 +33,116 @@ impl Plane {
     const e1: Plane = Plane(PGA3D::new(1.0, 2));
     const e2: Plane = Plane(PGA3D::new(1.0, 3));
     const e3: Plane = Plane(PGA3D::new(1.0, 4));
+    const left: Plane = Plane(PGA3D::new(1.0, 2));
+    const up: Plane = Plane(PGA3D::new(1.0, 3));
+    const forward: Plane = Plane(PGA3D::new(1.0, 4));
     pub fn new(a: f32, b: f32, c: f32, d: f32) -> Self {
         Plane(PGA3D::plane(a, b, c, d))
+    }
+
+    pub fn perpendicular_direction(&self) -> Direction {
+        Direction(self.0 | I)
+    }
+}
+
+impl Line {
+    const z_axis: Line = Line(pga3d::e12);
+    const x_axis: Line = Line(pga3d::e23);
+    const y_axis: Line = Line(pga3d::e31);
+
+    pub fn new(
+        dir_x: f32,
+        dir_y: f32,
+        dir_z: f32,
+        moment_x: f32,
+        moment_y: f32,
+        moment_z: f32,
+    ) -> Self {
+        let mut line = PGA3D::zero();
+        // pub const e01: PGA3D = PGA3D::new(1.0, 5);
+        // pub const e02: PGA3D = PGA3D::new(1.0, 6);
+        // pub const e03: PGA3D = PGA3D::new(1.0, 7);
+        // pub const e12: PGA3D = PGA3D::new(1.0, 8);
+        // pub const e31: PGA3D = PGA3D::new(1.0, 9);
+        // pub const e23: PGA3D = PGA3D::new(1.0, 10);
+        line.mvec[5] = moment_z; // e01 / z
+        line.mvec[6] = moment_x; // e02 / x
+        line.mvec[7] = moment_y; // e03 / y
+        line.mvec[8] = dir_z; // e12 / z
+        line.mvec[9] = dir_x; // e31 / x
+        line.mvec[10] = dir_y; // e23 / y
+        Line(line)
+    }
+
+    pub fn ideal(moment_x: f32, moment_y: f32, moment_z: f32) -> Self {
+        Line::new(0.0, 0.0, 0.0, moment_x, moment_y, moment_z)
+    }
+
+    pub fn through_origin(dir_x: f32, dir_y: f32, dir_z: f32) -> Self {
+        Line::new(dir_x, dir_y, dir_z, 0.0, 0.0, 0.0)
+    }
+
+    pub fn with_moment(&self, moment_x: f32, moment_y: f32, moment_z: f32) -> Self {
+        Line::new(
+            self.0.mvec[8],
+            self.0.mvec[9],
+            self.0.mvec[10],
+            moment_z,
+            moment_x,
+            moment_y,
+        )
+    }
+
+    pub fn with_direction(&self, dir_x: f32, dir_y: f32, dir_z: f32) -> Self {
+        Line::new(
+            dir_x,
+            dir_y,
+            dir_z,
+            self.0.mvec[5],
+            self.0.mvec[6],
+            self.0.mvec[7],
+        )
+    }
+
+    pub fn perpendicular_line(&self) -> Line {
+        Line(self.0 | I)
+    }
+}
+
+/// Right-handed y-up coordinate system
+impl Direction {
+    const up: Direction = Direction(pga3d::e013);
+    const left: Direction = Direction(pga3d::e032);
+    const forward: Direction = Direction(pga3d::e021);
+
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
+        Direction(PGA3D::direction(x, y, z))
+    }
+}
+
+impl Neg for Point {
+    type Output = Point;
+
+    fn neg(self) -> Point {
+        let mut obj = self.0;
+        obj.mvec[11] = -obj.mvec[11];
+        obj.mvec[12] = -obj.mvec[12];
+        obj.mvec[13] = -obj.mvec[13];
+
+        Point(obj)
+    }
+}
+
+impl Neg for Plane {
+    type Output = Plane;
+
+    fn neg(self) -> Plane {
+        let mut obj = self.0;
+        obj.mvec[1] = -obj.mvec[1];
+        obj.mvec[2] = -obj.mvec[2];
+        obj.mvec[3] = -obj.mvec[3];
+        obj.mvec[4] = -obj.mvec[4];
+        Plane(obj)
     }
 }
 
@@ -103,30 +151,39 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_works() {
-        let p0 = Point::new(0.0, 0.0, 0.0);
-        let p1 = Point::new(1.0, 0.0, 0.0);
-        let p2 = Point::new(0.0, 1.0, 0.0);
-        let p3 = Point::new(0.0, 0.0, 1.0);
-        let line1: Option<Line> = p1 & p2; // Create line by joining two points
-        assert!(line1.is_some());
-        let degenerate_line1: Option<Line> = p1 & p1; // Joining a point with itself is zero
-        assert!(degenerate_line1.is_none());
-        let plane: Option<Plane> = p1 & p2 & p3; // Create plane by joining three points
-        assert!(plane.is_some());
-        let degenerate_plane1: Option<Plane> = p1 & p2 & p2; // Joining two identical points is zero
-        assert!(degenerate_plane1.is_none());
-        let origin: Option<Point> = Plane::e1 ^ Plane::e2 ^ Plane::e3; // Create a point by meeting three planes
-        assert!(origin.is_some());
-        let line = Plane::e1 ^ Plane::e2; // Create a line by meeting two planes
-        assert!(line.is_some());
-        let origin2 = line ^ Plane::e3; // Create a point by meeting a line and a plane
-        assert!(origin2.is_some());
-        assert_eq!(origin, origin2);
-        assert_eq!(origin, Some(p0));
-        let plane2 = line1 & p3; // Create a plane joining a line and a point
-        assert!(plane2.is_some());
-        let plane3 = line1 & p1; // If the point is co-linear with the line, the result is zero
-        assert!(plane3.is_none());
+    fn direction_to_plane() {
+        let plane = Plane::new(1.0, 0.0, 0.0, 1.0);
+        assert_eq!(
+            Direction::new(1.0, 0.0, 0.0),
+            plane.perpendicular_direction()
+        );
+        let plane = Plane::new(1.0, 0.0, 0.0, 0.0);
+        assert_eq!(
+            Direction::new(1.0, 0.0, 0.0),
+            plane.perpendicular_direction()
+        );
+        let plane = Plane::new(-1.0, -1.0, 0.0, 0.0);
+        assert_eq!(
+            Direction::new(-1.0, -1.0, 0.0),
+            plane.perpendicular_direction()
+        );
+        let plane = Plane::new(-1.0, -1.0, 0.0, 1.0);
+        assert_eq!(
+            Direction::new(-1.0, -1.0, 0.0),
+            plane.perpendicular_direction()
+        );
+    }
+
+    #[test]
+    fn direction_to_line() {
+        let line = (Plane::up ^ Plane::new(0.0, 0.0, -1.0, 1.0)).unwrap();
+        assert_eq!(Line::ideal(0.0, 0.0, 1.0), line.perpendicular_line());
+    }
+
+    #[test]
+    fn line_axes() {
+        assert_eq!(Line::z_axis, (Plane::left ^ Plane::up).unwrap());
+        assert_eq!(Line::y_axis, (Plane::forward ^ Plane::left).unwrap());
+        assert_eq!(Line::x_axis, (Plane::up ^ Plane::forward).unwrap());
     }
 }
