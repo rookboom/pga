@@ -1,6 +1,6 @@
 mod incidence;
 mod pga3d;
-mod reject;
+mod project_reject;
 
 use std::ops::Neg;
 
@@ -175,8 +175,10 @@ mod tests {
     }
 
     #[test]
-    fn direction_to_line() {
-        let line = (Plane::up ^ Plane::new(0.0, 0.0, -1.0, 1.0)).unwrap();
+    fn ideal_line_perpendicular_to_line() {
+        let line = (Plane::new(0.0, 0.0, 1.0, 1.0) ^ Plane::up).unwrap();
+        assert_eq!(Line::ideal(0.0, 0.0, 1.0), line.perpendicular_line());
+        let line = (Plane::forward ^ Plane::up).unwrap();
         assert_eq!(Line::ideal(0.0, 0.0, 1.0), line.perpendicular_line());
     }
 
