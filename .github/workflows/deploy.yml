@@ -39,7 +39,7 @@ jobs:
     
     - name: Build WebAssembly
       run: |
-        wasm-pack build --target web --out-dir web/pkg --features web --release
+        wasm-pack build --target web --out-dir web/pkg --features web
     
     - name: Verify build output
       run: |
