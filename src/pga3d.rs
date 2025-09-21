@@ -12,9 +12,9 @@ use std::ops::{Add, BitAnd, BitOr, BitXor, Index, IndexMut, Mul, Not, Sub};
 type float_t = f32;
 
 // use std::f64::consts::PI;
-const PI: float_t = 3.14159265358979323846;
+const PI: float_t = 3.141_592_7;
 
-const basis: &'static [&'static str] = &[
+const basis: &[&str] = &[
     "1", "e0", "e1", "e2", "e3", "e01", "e02", "e03", "e12", "e31", "e23", "e021", "e013", "e032",
     "e123", "e0123",
 ];
@@ -66,13 +66,13 @@ pub const I: PGA3D = e0123; // Pseudoscalar
 impl Index<usize> for PGA3D {
     type Output = float_t;
 
-    fn index<'a>(&'a self, index: usize) -> &'a Self::Output {
+    fn index(&self, index: usize) -> &Self::Output {
         &self.mvec[index]
     }
 }
 
 impl IndexMut<usize> for PGA3D {
-    fn index_mut<'a>(&'a mut self, index: usize) -> &'a mut Self::Output {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.mvec[index]
     }
 }
@@ -85,7 +85,7 @@ impl fmt::Display for PGA3D {
             .iter()
             .enumerate()
             .filter_map(|(i, &coeff)| {
-                if coeff > 0.00001 || coeff < -0.00001 {
+                if !(-0.00001..=0.00001).contains(&coeff) {
                     n = 1;
                     Some(format!(
                         "{}{}",
@@ -103,7 +103,7 @@ impl fmt::Display for PGA3D {
         if n == 0 {
             write!(f, "0")
         } else {
-            write!(f, "{}", ret)
+            write!(f, "{ret}")
         }
     }
 }
@@ -111,7 +111,7 @@ impl fmt::Display for PGA3D {
 // Reverse
 // Reverse the order of the basis blades.
 impl PGA3D {
-    pub fn Reverse(self: Self) -> PGA3D {
+    pub fn Reverse(self) -> PGA3D {
         let mut res = PGA3D::zero();
         let a = self;
         res[0] = a[0];
@@ -137,7 +137,7 @@ impl PGA3D {
 // Dual
 // Poincare duality operator.
 impl PGA3D {
-    pub fn Dual(self: Self) -> PGA3D {
+    pub fn Dual(self) -> PGA3D {
         let mut res = PGA3D::zero();
         let a = self;
         res[0] = a[15];
@@ -163,7 +163,7 @@ impl PGA3D {
 impl Not for PGA3D {
     type Output = PGA3D;
 
-    fn not(self: Self) -> PGA3D {
+    fn not(self) -> PGA3D {
         let mut res = PGA3D::zero();
         let a = self;
         res[0] = a[15];
@@ -189,7 +189,7 @@ impl Not for PGA3D {
 // Conjugate
 // Clifford Conjugation
 impl PGA3D {
-    pub fn Conjugate(self: Self) -> PGA3D {
+    pub fn Conjugate(self) -> PGA3D {
         let mut res = PGA3D::zero();
         let a = self;
         res[0] = a[0];
@@ -215,7 +215,7 @@ impl PGA3D {
 // Involute
 // Main involution
 impl PGA3D {
-    pub fn Involute(self: Self) -> PGA3D {
+    pub fn Involute(self) -> PGA3D {
         let mut res = PGA3D::zero();
         let a = self;
         res[0] = a[0];
@@ -456,75 +456,60 @@ impl BitAnd for PGA3D {
         let mut res = PGA3D::zero();
         let a = self;
         res[15] = 1.0 * (a[15] * b[15]);
-        res[14] = -1.0 * (a[14] * -1.0 * b[15] + a[15] * b[14] * -1.0);
-        res[13] = -1.0 * (a[13] * -1.0 * b[15] + a[15] * b[13] * -1.0);
-        res[12] = -1.0 * (a[12] * -1.0 * b[15] + a[15] * b[12] * -1.0);
-        res[11] = -1.0 * (a[11] * -1.0 * b[15] + a[15] * b[11] * -1.0);
-        res[10] = 1.0
-            * (a[10] * b[15] + a[13] * -1.0 * b[14] * -1.0 - a[14] * -1.0 * b[13] * -1.0
-                + a[15] * b[10]);
-        res[9] = 1.0
-            * (a[9] * b[15] + a[12] * -1.0 * b[14] * -1.0 - a[14] * -1.0 * b[12] * -1.0
-                + a[15] * b[9]);
-        res[8] = 1.0
-            * (a[8] * b[15] + a[11] * -1.0 * b[14] * -1.0 - a[14] * -1.0 * b[11] * -1.0
-                + a[15] * b[8]);
-        res[7] = 1.0
-            * (a[7] * b[15] + a[12] * -1.0 * b[13] * -1.0 - a[13] * -1.0 * b[12] * -1.0
-                + a[15] * b[7]);
-        res[6] = 1.0
-            * (a[6] * b[15] - a[11] * -1.0 * b[13] * -1.0
-                + a[13] * -1.0 * b[11] * -1.0
-                + a[15] * b[6]);
-        res[5] = 1.0
-            * (a[5] * b[15] + a[11] * -1.0 * b[12] * -1.0 - a[12] * -1.0 * b[11] * -1.0
-                + a[15] * b[5]);
+        res[14] = -(-a[14] * b[15] + -(a[15] * b[14]));
+        res[13] = -(-a[13] * b[15] + -(a[15] * b[13]));
+        res[12] = -(-a[12] * b[15] + -(a[15] * b[12]));
+        res[11] = -(-a[11] * b[15] + -(a[15] * b[11]));
+        res[10] = 1.0 * (a[10] * b[15] + -(-a[13] * b[14]) - -(-a[14] * b[13]) + a[15] * b[10]);
+        res[9] = 1.0 * (a[9] * b[15] + -(-a[12] * b[14]) - -(-a[14] * b[12]) + a[15] * b[9]);
+        res[8] = 1.0 * (a[8] * b[15] + -(-a[11] * b[14]) - -(-a[14] * b[11]) + a[15] * b[8]);
+        res[7] = 1.0 * (a[7] * b[15] + -(-a[12] * b[13]) - -(-a[13] * b[12]) + a[15] * b[7]);
+        res[6] = 1.0 * (a[6] * b[15] - -(-a[11] * b[13]) + -(-a[13] * b[11]) + a[15] * b[6]);
+        res[5] = 1.0 * (a[5] * b[15] + -(-a[11] * b[12]) - -(-a[12] * b[11]) + a[15] * b[5]);
         res[4] = 1.0
-            * (a[4] * b[15] - a[7] * b[14] * -1.0 + a[9] * b[13] * -1.0
-                - a[10] * b[12] * -1.0
-                - a[12] * -1.0 * b[10]
-                + a[13] * -1.0 * b[9]
-                - a[14] * -1.0 * b[7]
+            * (a[4] * b[15] - -(a[7] * b[14]) + -(a[9] * b[13])
+                - -(a[10] * b[12])
+                - -a[12] * b[10]
+                + -a[13] * b[9]
+                - -a[14] * b[7]
                 + a[15] * b[4]);
         res[3] = 1.0
-            * (a[3] * b[15] - a[6] * b[14] * -1.0 - a[8] * b[13] * -1.0
-                + a[10] * b[11] * -1.0
-                + a[11] * -1.0 * b[10]
-                - a[13] * -1.0 * b[8]
-                - a[14] * -1.0 * b[6]
+            * (a[3] * b[15] - -(a[6] * b[14]) - -(a[8] * b[13])
+                + -(a[10] * b[11])
+                + -a[11] * b[10]
+                - -a[13] * b[8]
+                - -a[14] * b[6]
                 + a[15] * b[3]);
         res[2] = 1.0
-            * (a[2] * b[15] - a[5] * b[14] * -1.0 + a[8] * b[12] * -1.0
-                - a[9] * b[11] * -1.0
-                - a[11] * -1.0 * b[9]
-                + a[12] * -1.0 * b[8]
-                - a[14] * -1.0 * b[5]
+            * (a[2] * b[15] - -(a[5] * b[14]) + -(a[8] * b[12]) - -(a[9] * b[11]) - -a[11] * b[9]
+                + -a[12] * b[8]
+                - -a[14] * b[5]
                 + a[15] * b[2]);
         res[1] = 1.0
             * (a[1] * b[15]
-                + a[5] * b[13] * -1.0
-                + a[6] * b[12] * -1.0
-                + a[7] * b[11] * -1.0
-                + a[11] * -1.0 * b[7]
-                + a[12] * -1.0 * b[6]
-                + a[13] * -1.0 * b[5]
+                + -(a[5] * b[13])
+                + -(a[6] * b[12])
+                + -(a[7] * b[11])
+                + -a[11] * b[7]
+                + -a[12] * b[6]
+                + -a[13] * b[5]
                 + a[15] * b[1]);
         res[0] = 1.0
             * (a[0] * b[15]
-                + a[1] * b[14] * -1.0
-                + a[2] * b[13] * -1.0
-                + a[3] * b[12] * -1.0
-                + a[4] * b[11] * -1.0
+                + -(a[1] * b[14])
+                + -(a[2] * b[13])
+                + -(a[3] * b[12])
+                + -(a[4] * b[11])
                 + a[5] * b[10]
                 + a[6] * b[9]
                 + a[7] * b[8]
                 + a[8] * b[7]
                 + a[9] * b[6]
                 + a[10] * b[5]
-                - a[11] * -1.0 * b[4]
-                - a[12] * -1.0 * b[3]
-                - a[13] * -1.0 * b[2]
-                - a[14] * -1.0 * b[1]
+                - -a[11] * b[4]
+                - -a[12] * b[3]
+                - -a[13] * b[2]
+                - -a[14] * b[1]
                 + a[15] * b[0]);
         res
     }
@@ -760,17 +745,17 @@ impl Add<float_t> for PGA3D {
 }
 
 impl PGA3D {
-    pub fn norm(self: Self) -> float_t {
+    pub fn norm(self) -> float_t {
         let scalar_part = (self * self.Conjugate())[0];
 
         scalar_part.abs().sqrt()
     }
 
-    pub fn inorm(self: Self) -> float_t {
+    pub fn inorm(self) -> float_t {
         self.Dual().norm()
     }
 
-    pub fn normalized(self: Self) -> Self {
+    pub fn normalized(self) -> Self {
         self * (1.0 / self.norm())
     }
 
@@ -878,13 +863,13 @@ fn main() {
     let point_on_plane = (p | px) * p;
 
     // Some output
-    println!("a point       : {}", px);
-    println!("a line        : {}", line);
-    println!("a plane       : {}", p);
-    println!("a rotor       : {}", rot);
-    println!("rotated line  : {}", rotated_line);
-    println!("rotated point : {}", rotated_point);
-    println!("rotated plane : {}", rotated_plane);
+    println!("a point       : {px}");
+    println!("a line        : {line}");
+    println!("a plane       : {p}");
+    println!("a rotor       : {rot}");
+    println!("rotated line  : {rotated_line}");
+    println!("rotated point : {rotated_point}");
+    println!("rotated plane : {rotated_plane}");
     println!("point on plane: {}", point_on_plane.normalized());
     println!("point on torus: {}", PGA3D::point_on_torus(0.0, 0.0));
 }

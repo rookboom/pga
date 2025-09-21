@@ -16,7 +16,7 @@ use std::ops::Neg;
 
 use pga3d::PGA3D;
 
-use crate::pga3d::{I, e1, e2, e3, e032, e0123, e123};
+use crate::pga3d::I;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Point(PGA3D);

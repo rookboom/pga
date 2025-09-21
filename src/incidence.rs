@@ -67,10 +67,7 @@ impl BitXor<Plane> for Option<Line> {
     type Output = Option<Point>;
 
     fn bitxor(self, b: Plane) -> Option<Point> {
-        match self {
-            Some(line) => Some(Point(line.0 ^ b.0)),
-            None => None,
-        }
+        self.map(|line| Point(line.0 ^ b.0))
     }
 }
 
