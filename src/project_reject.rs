@@ -1,4 +1,4 @@
-use std::ops::BitOr;
+use std::ops::{BitOr, Mul};
 
 use crate::{Line, Plane, Point, pga3d::PGA3D};
 
@@ -28,6 +28,22 @@ impl BitOr<Point> for Line {
 
     fn bitor(self, b: Point) -> Plane {
         Plane(self.0 | b.0)
+    }
+}
+
+impl Mul<Point> for Line {
+    type Output = Plane;
+
+    fn mul(self, b: Point) -> Plane {
+        Plane(self.0 * b.0)
+    }
+}
+
+impl Mul<Plane> for Line {
+    type Output = Point;
+
+    fn mul(self, b: Plane) -> Point {
+        Point(self.0 * b.0)
     }
 }
 
@@ -62,5 +78,23 @@ mod tests {
         let forward = Line::z_axis;
         let plane: Plane = forward | Point::x1;
         assert_eq!(plane, -Plane::forward);
+    }
+
+    #[test]
+    fn project_plane_onto_point() {
+        let left = Plane::left;
+        let point = Point::x1;
+
+        let plane: Plane = (left | point) * point;
+        assert_eq!(plane, Plane::new(-1.0, 0.0, 0.0, 1.0)); // Note the direction of the resulting plane changed from the input plane.
+    }
+
+    #[test]
+    fn project_point_onto_plane() {
+        let plane = Plane::new(1.0, 0.0, 0.0, 0.0);
+        let point = Point::new(3.0, 0.0, 0.0);
+        let projected_point: Point = (plane | point) * plane;
+
+        assert_eq!(projected_point, Point::new(0.0, 0.0, 0.0));
     }
 }

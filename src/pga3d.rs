@@ -46,7 +46,7 @@ impl PGA3D {
 }
 
 // basis vectors are available as global constants.
-pub const e0: PGA3D = PGA3D::new(1.0, 1); // Scalar
+pub const e0: PGA3D = PGA3D::new(1.0, 1); // Plane at infinity
 pub const e1: PGA3D = PGA3D::new(1.0, 2); // Plane with normal in X direction
 pub const e2: PGA3D = PGA3D::new(1.0, 3); // Plane with normal in Y direction
 pub const e3: PGA3D = PGA3D::new(1.0, 4); // Plane with normal in Z direction

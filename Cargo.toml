@@ -3,4 +3,23 @@ name = "pga"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+visualization = ["dep:bevy"]
+web = ["visualization", "dep:wasm-bindgen", "dep:web-sys", "dep:console_error_panic_hook"]
+
 [dependencies]
+bevy = { version = "0.16.1", optional = true, features = ["default"], default-features = false }
+
+# WASM dependencies
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = { version = "0.2", optional = true }
+web-sys = { version = "0.3", optional = true }
+console_error_panic_hook = { version = "0.1", optional = true }
+
+[[example]]
+name = "visualization"
+required-features = ["visualization"]

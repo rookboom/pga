@@ -1,0 +1,26 @@
+{
+    "name": "pga-visualization",
+    "version": "0.1.0",
+    "description": "Projective Geometric Algebra visualization using Bevy and WebAssembly",
+    "scripts": {
+        "build": "./build_web.sh",
+        "serve": "cd web && python3 -m http.server 8000",
+        "dev": "npm run build && npm run serve"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/rookboom/pga.git"
+    },
+    "keywords": [
+        "rust",
+        "webassembly",
+        "bevy",
+        "geometric-algebra",
+        "pga",
+        "visualization",
+        "3d",
+        "mathematics"
+    ],
+    "author": "Johan",
+    "license": "MIT"
+}

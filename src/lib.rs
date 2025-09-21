@@ -2,6 +2,16 @@ mod incidence;
 mod pga3d;
 mod project_reject;
 
+#[cfg(feature = "visualization")]
+pub mod visualization;
+
+// WASM entry point
+#[cfg(all(target_arch = "wasm32", feature = "web"))]
+mod web;
+
+#[cfg(all(target_arch = "wasm32", feature = "web"))]
+pub use web::*;
+
 use std::ops::Neg;
 
 use pga3d::PGA3D;
@@ -33,9 +43,9 @@ impl Plane {
     const e1: Plane = Plane(PGA3D::new(1.0, 2));
     const e2: Plane = Plane(PGA3D::new(1.0, 3));
     const e3: Plane = Plane(PGA3D::new(1.0, 4));
-    const left: Plane = Plane(PGA3D::new(1.0, 2));
-    const up: Plane = Plane(PGA3D::new(1.0, 3));
-    const forward: Plane = Plane(PGA3D::new(1.0, 4));
+    const left: Plane = Self::e1;
+    const up: Plane = Self::e2;
+    const forward: Plane = Self::e3;
     pub fn new(a: f32, b: f32, c: f32, d: f32) -> Self {
         Plane(PGA3D::plane(a, b, c, d))
     }
