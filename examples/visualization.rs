@@ -1,8 +1,8 @@
-use pga::visualization::{PGAScene, PGAVisualizationApp};
+use pga::visualization::{PGAVisualizationApp, demo};
 
 fn main() {
     // Create a demo scene with various PGA objects
-    let scene = PGAScene::demo();
+    let scene = demo();
 
     // Create and configure the Bevy app
     let mut app = PGAVisualizationApp::new();

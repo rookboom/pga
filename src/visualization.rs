@@ -21,6 +21,76 @@ use crate::{Direction, Line, Plane, Point};
 #[derive(Default, Reflect, GizmoConfigGroup)]
 pub struct PGAGizmos;
 
+/// Available scene types
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SceneType {
+    Demo,
+    Points,
+    Lines,
+    Planes,
+    Mixed,
+}
+
+impl SceneType {
+    pub fn all() -> Vec<SceneType> {
+        vec![
+            SceneType::Demo,
+            SceneType::Points,
+            SceneType::Lines,
+            SceneType::Planes,
+            SceneType::Mixed,
+        ]
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            SceneType::Demo => "Demo Scene",
+            SceneType::Points => "Points Only",
+            SceneType::Lines => "Lines Only",
+            SceneType::Planes => "Planes Only",
+            SceneType::Mixed => "Mixed Objects",
+        }
+    }
+
+    pub fn next(&self) -> SceneType {
+        match self {
+            SceneType::Demo => SceneType::Points,
+            SceneType::Points => SceneType::Lines,
+            SceneType::Lines => SceneType::Planes,
+            SceneType::Planes => SceneType::Mixed,
+            SceneType::Mixed => SceneType::Demo,
+        }
+    }
+
+    pub fn previous(&self) -> SceneType {
+        match self {
+            SceneType::Demo => SceneType::Mixed,
+            SceneType::Points => SceneType::Demo,
+            SceneType::Lines => SceneType::Points,
+            SceneType::Planes => SceneType::Lines,
+            SceneType::Mixed => SceneType::Planes,
+        }
+    }
+}
+
+/// Resource for tracking current scene selection
+#[derive(Resource)]
+pub struct SceneSelection {
+    pub current: SceneType,
+}
+
+impl Default for SceneSelection {
+    fn default() -> Self {
+        Self {
+            current: SceneType::Demo,
+        }
+    }
+}
+
+/// Component to mark the scene name text UI element
+#[derive(Component)]
+struct SceneNameText;
+
 /// Resource containing PGA objects to visualize
 #[derive(Resource, Default)]
 pub struct PGAScene {
@@ -30,21 +100,18 @@ pub struct PGAScene {
     pub directions: Vec<Direction>,
 }
 
+pub fn demo() -> PGAScene {
+    create_scene(SceneType::Demo)
+}
+
 impl PGAScene {
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Creates a demo scene with various PGA objects for visualization
-    pub fn demo() -> Self {
-        Self::new()
-            .with_point(Point::new(0.0, 0.0, 0.0)) // Origin
-            .with_point(Point::new(1.0, 1.0, 1.0)) // Corner point
-            .with_point(Point::new(-1.0, 0.5, 0.5)) // Another point
-            .with_direction(Direction::new(1.0, 0.0, 0.0)) // X direction
-            .with_direction(Direction::new(0.0, 1.0, 0.0)) // Y direction
-            .with_line(Line::through_origin(1.0, 1.0, 0.0)) // Line through origin
-            .with_plane(Plane::new(1.0, 0.0, 0.0, 1.0)) // Plane x = -1
+    /// Create a scene based on the scene type
+    pub fn from_type(scene_type: SceneType) -> Self {
+        create_scene(scene_type)
     }
 
     pub fn with_point(mut self, point: Point) -> Self {
@@ -66,21 +133,42 @@ impl PGAScene {
         self.directions.push(direction);
         self
     }
+}
 
-    pub fn add_point(&mut self, point: Point) {
-        self.points.push(point);
-    }
+/// Create different scenes based on scene type
+fn create_scene(scene_type: SceneType) -> PGAScene {
+    match scene_type {
+        SceneType::Demo => PGAScene::new()
+            .with_point(Point::new(0.0, 0.0, 0.0)) // Origin
+            .with_point(Point::new(1.0, 1.0, 1.0)) // Corner point
+            .with_point(Point::new(1.0, 0.5, 0.5)) // Another point
+            .with_direction(Direction::new(1.0, 0.0, 0.0)), // X direction
 
-    pub fn add_plane(&mut self, plane: Plane) {
-        self.planes.push(plane);
-    }
+        SceneType::Points => PGAScene::new()
+            .with_point(Point::new(0.0, 0.0, 0.0)) // Origin
+            .with_point(Point::new(1.0, 0.0, 0.0)) // X axis
+            .with_point(Point::new(0.0, 1.0, 0.0)) // Y axis
+            .with_point(Point::new(0.0, 0.0, 1.0)) // Z axis
+            .with_point(Point::new(1.0, 1.0, 1.0)) // Corner
+            .with_point(Point::new(-1.0, -1.0, -1.0)), // Opposite corner
 
-    pub fn add_line(&mut self, line: Line) {
-        self.lines.push(line);
-    }
+        SceneType::Lines => PGAScene::new()
+            .with_line(Line::through_origin(1.0, 0.0, 0.0)) // X axis line
+            .with_line(Line::through_origin(0.0, 1.0, 0.0)) // Y axis line
+            .with_line(Line::through_origin(0.0, 0.0, 1.0)) // Z axis line
+            .with_line(Line::through_origin(1.0, 1.0, 0.0)), // Diagonal line
 
-    pub fn add_direction(&mut self, direction: Direction) {
-        self.directions.push(direction);
+        SceneType::Planes => PGAScene::new()
+            .with_plane(Plane::new(1.0, 0.0, 0.0, 1.0)) // X = -1 plane
+            .with_plane(Plane::new(0.0, 1.0, 0.0, 1.0)) // Y = -1 plane
+            .with_plane(Plane::new(0.0, 0.0, 1.0, 1.0)), // Z = -1 plane
+
+        SceneType::Mixed => PGAScene::new()
+            .with_point(Point::new(0.0, 0.0, 0.0)) // Origin
+            .with_direction(Direction::new(1.0, 0.0, 0.0)) // X direction
+            .with_direction(Direction::new(0.0, 1.0, 0.0)) // Y direction
+            .with_line(Line::through_origin(1.0, 1.0, 0.0)) // Diagonal line
+            .with_plane(Plane::new(1.0, 0.0, 0.0, 1.0)), // X = -1 plane
     }
 }
 
@@ -104,9 +192,13 @@ impl PGAVisualizationApp {
             override_input_system: true,
         })
         .init_gizmo_group::<PGAGizmos>()
-        .add_systems(Startup, setup_scene)
+        .init_resource::<SceneSelection>()
+        .add_systems(Startup, (setup_scene, setup_ui))
         .add_systems(Update, draw_pga_gizmos)
-        .add_systems(Update, input_map);
+        .add_systems(Update, input_map)
+        .add_systems(Update, handle_scene_reload)
+        .add_systems(Update, scene_selection_input)
+        .add_systems(Update, update_scene_ui);
 
         app
     }
@@ -128,32 +220,110 @@ fn setup_scene(mut commands: Commands) {
             Vec3::Y,
         ));
 
-    // Add basic lighting
+    commands.insert_resource(demo());
+
+    // Print controls
+    info!("=== PGA Visualization Controls ===");
+    info!("Scene Selection:");
+    info!("  1-5: Select scene type directly");
+    info!("  [ / ]: Previous scene");
+    info!("  ] / →: Next scene");
+    info!("Camera Controls:");
+    info!("  Left mouse + drag: Orbit camera");
+    info!("  Mouse wheel: Zoom in/out");
+    info!("Other:");
+    info!("  Enter: Reload current scene");
+}
+
+/// System to handle scene reloading when Enter is pressed
+fn handle_scene_reload(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut scene: ResMut<PGAScene>,
+    scene_selection: Res<SceneSelection>,
+) {
+    if keyboard.just_pressed(KeyCode::Enter) {
+        // Clear the existing scene and replace with current selection
+        *scene = create_scene(scene_selection.current);
+        info!("Scene reloaded!");
+    }
+}
+
+/// Setup UI elements
+fn setup_ui(mut commands: Commands) {
+    // Create UI text for scene name in top-left corner
     commands.spawn((
-        DirectionalLight {
-            shadows_enabled: true,
+        Text::new("Demo Scene\nPress 1-5 or ←/→ to change"),
+        Node {
+            position_type: PositionType::Absolute,
+            left: Val::Px(10.0),
+            top: Val::Px(10.0),
             ..default()
         },
-        Transform::from_rotation(Quat::from_euler(
-            EulerRot::ZYX,
-            0.0,
-            std::f32::consts::PI / 4.0,
-            -std::f32::consts::PI / 4.0,
-        )),
+        SceneNameText,
     ));
+}
 
-    // Add ambient light
-    commands.insert_resource(AmbientLight {
-        color: Color::WHITE,
-        brightness: 0.3,
-        affects_lightmapped_meshes: true,
-    });
+/// Update the scene name text when scene changes
+fn update_scene_ui(
+    scene_selection: Res<SceneSelection>,
+    mut query: Query<&mut Text, With<SceneNameText>>,
+) {
+    if scene_selection.is_changed() {
+        for mut text in query.iter_mut() {
+            **text = format!(
+                "{}\nPress 1-5 or ←/→ to change",
+                scene_selection.current.name()
+            );
+        }
+    }
+}
 
-    // Initialize the PGA scene with a point at the origin
-    let mut scene = PGAScene::new();
-    scene.add_point(Point::new(0.0, 0.0, 0.0));
+/// System for keyboard scene selection shortcuts
+fn scene_selection_input(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut scene_selection: ResMut<SceneSelection>,
+    mut scene: ResMut<PGAScene>,
+) {
+    let mut changed = false;
 
-    commands.insert_resource(scene);
+    // Use number keys 1-5 to select scene types
+    if keyboard.just_pressed(KeyCode::Digit1) {
+        scene_selection.current = SceneType::Demo;
+        changed = true;
+    } else if keyboard.just_pressed(KeyCode::Digit2) {
+        scene_selection.current = SceneType::Points;
+        changed = true;
+    } else if keyboard.just_pressed(KeyCode::Digit3) {
+        scene_selection.current = SceneType::Lines;
+        changed = true;
+    } else if keyboard.just_pressed(KeyCode::Digit4) {
+        scene_selection.current = SceneType::Planes;
+        changed = true;
+    } else if keyboard.just_pressed(KeyCode::Digit5) {
+        scene_selection.current = SceneType::Mixed;
+        changed = true;
+    }
+    // Use arrow keys to cycle through scenes
+    else if keyboard.just_pressed(KeyCode::ArrowRight)
+        || keyboard.just_pressed(KeyCode::BracketRight)
+    {
+        scene_selection.current = scene_selection.current.next();
+        changed = true;
+    } else if keyboard.just_pressed(KeyCode::ArrowLeft)
+        || keyboard.just_pressed(KeyCode::BracketLeft)
+    {
+        scene_selection.current = scene_selection.current.previous();
+        changed = true;
+    }
+
+    if changed {
+        *scene = create_scene(scene_selection.current);
+        info!(
+            "Scene changed to: {} ({})",
+            scene_selection.current.name(),
+            scene_selection.current as u8 + 1
+        );
+    }
 }
 
 /// System to draw PGA objects using Bevy's gizmo API
@@ -170,20 +340,14 @@ fn draw_pga_gizmos(mut gizmos: Gizmos<PGAGizmos>, scene: Option<Res<PGAScene>>) 
     // Draw points as small spheres
     for point in &scene.points {
         let pos = pga_point_to_vec3(*point);
-        gizmos.sphere(pos, 0.1, LinearRgba::new(1.0, 1.0, 0.0, 1.0)); // Yellow
-
-        // Also draw a small cross to make points more visible
-        let size = 0.2;
-        let yellow = LinearRgba::new(1.0, 1.0, 0.0, 1.0);
-        gizmos.line(pos - Vec3::X * size, pos + Vec3::X * size, yellow);
-        gizmos.line(pos - Vec3::Y * size, pos + Vec3::Y * size, yellow);
-        gizmos.line(pos - Vec3::Z * size, pos + Vec3::Z * size, yellow);
+        gizmos.sphere(pos, 0.01, LinearRgba::new(1.0, 1.0, 0.0, 1.0)); // Yellow
     }
 
     // Draw directions as arrows from origin
     for direction in &scene.directions {
         let dir = pga_direction_to_vec3(*direction);
-        gizmos.arrow(Vec3::ZERO, dir * 2.0, LinearRgba::new(0.0, 1.0, 1.0, 1.0)); // Cyan
+        gizmos.arrow(Vec3::ZERO, dir * 2.0, LinearRgba::new(0.0, 1.0, 1.0, 1.0));
+        // Cyan
     }
 
     // Draw lines
@@ -193,7 +357,8 @@ fn draw_pga_gizmos(mut gizmos: Gizmos<PGAGizmos>, scene: Option<Res<PGAScene>>) 
 
     // Draw planes as grids
     for plane in &scene.planes {
-        draw_pga_plane(&mut gizmos, *plane, LinearRgba::new(0.5, 0.0, 0.5, 1.0)); // Purple
+        draw_pga_plane(&mut gizmos, *plane, LinearRgba::new(0.5, 0.0, 0.5, 1.0));
+        // Purple
     }
 }
 
@@ -211,9 +376,9 @@ fn pga_point_to_vec3(point: Point) -> Vec3 {
 
     // Extract coordinates by dividing by the e123 component
     let w = pga.mvec[14]; // e123 component
-    let x = -pga.mvec[13] / w; // e032 component
-    let y = pga.mvec[11] / w; // e021 component  
-    let z = -pga.mvec[12] / w; // e013 component
+    let x = pga.mvec[13] / w; // e032 component
+    let y = pga.mvec[11] / w; // e021 component
+    let z = pga.mvec[12] / w; // e013 component
 
     Vec3::new(x, y, z)
 }
@@ -223,9 +388,9 @@ fn pga_direction_to_vec3(direction: Direction) -> Vec3 {
     let pga = direction.0;
 
     // Direction vectors are represented as x*e032 + y*e013 + z*e021
-    let x = -pga.mvec[13]; // e032 component
+    let x = pga.mvec[13]; // e032 component
     let y = pga.mvec[11]; // e021 component
-    let z = -pga.mvec[12]; // e013 component
+    let z = pga.mvec[12]; // e013 component
 
     Vec3::new(x, y, z)
 }
@@ -236,7 +401,7 @@ fn draw_pga_line(gizmos: &mut Gizmos<PGAGizmos>, line: Line, color: LinearRgba) 
 
     // Extract direction and moment components
     let dir_x = pga.mvec[9]; // e31
-    let dir_y = pga.mvec[10]; // e23  
+    let dir_y = pga.mvec[10]; // e23
     let dir_z = pga.mvec[8]; // e12
 
     let mom_x = pga.mvec[6]; // e02
@@ -280,7 +445,7 @@ fn draw_pga_plane(gizmos: &mut Gizmos<PGAGizmos>, plane: Plane, color: LinearRgb
 
     // Extract plane equation coefficients: ax + by + cz + d = 0
     let a = pga.mvec[2]; // e1
-    let b = pga.mvec[3]; // e2  
+    let b = pga.mvec[3]; // e2
     let c = pga.mvec[4]; // e3
     let d = pga.mvec[1]; // e0
 
