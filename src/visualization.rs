@@ -22,68 +22,43 @@ use crate::{Direction, Line, Plane, Point};
 pub struct PGAGizmos;
 
 /// Available scene types
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SceneType {
-    Demo,
-    Points,
-    Lines,
-    Planes,
-    Mixed,
+/// Resource containing all available scenes
+#[derive(Resource)]
+pub struct SceneLibrary {
+    pub scenes: Vec<PGAScene>,
 }
 
-impl SceneType {
-    pub fn all() -> Vec<SceneType> {
-        vec![
-            SceneType::Demo,
-            SceneType::Points,
-            SceneType::Lines,
-            SceneType::Planes,
-            SceneType::Mixed,
-        ]
-    }
-
-    pub fn name(&self) -> &'static str {
-        match self {
-            SceneType::Demo => "Demo Scene",
-            SceneType::Points => "Points Only",
-            SceneType::Lines => "Lines Only",
-            SceneType::Planes => "Planes Only",
-            SceneType::Mixed => "Mixed Objects",
+impl SceneLibrary {
+    pub fn new() -> Self {
+        Self {
+            scenes: vec![
+                create_demo_scene(),
+                create_points_scene(),
+                create_lines_scene(),
+                create_planes_scene(),
+                create_mixed_scene(),
+            ],
         }
     }
 
-    pub fn next(&self) -> SceneType {
-        match self {
-            SceneType::Demo => SceneType::Points,
-            SceneType::Points => SceneType::Lines,
-            SceneType::Lines => SceneType::Planes,
-            SceneType::Planes => SceneType::Mixed,
-            SceneType::Mixed => SceneType::Demo,
-        }
+    pub fn get(&self, index: usize) -> Option<&PGAScene> {
+        self.scenes.get(index)
     }
 
-    pub fn previous(&self) -> SceneType {
-        match self {
-            SceneType::Demo => SceneType::Mixed,
-            SceneType::Points => SceneType::Demo,
-            SceneType::Lines => SceneType::Points,
-            SceneType::Planes => SceneType::Lines,
-            SceneType::Mixed => SceneType::Planes,
-        }
+    pub fn len(&self) -> usize {
+        self.scenes.len()
     }
 }
 
 /// Resource for tracking current scene selection
 #[derive(Resource)]
 pub struct SceneSelection {
-    pub current: SceneType,
+    pub current_index: usize,
 }
 
 impl Default for SceneSelection {
     fn default() -> Self {
-        Self {
-            current: SceneType::Demo,
-        }
+        Self { current_index: 0 }
     }
 }
 
@@ -92,26 +67,40 @@ impl Default for SceneSelection {
 struct SceneNameText;
 
 /// Resource containing PGA objects to visualize
-#[derive(Resource, Default)]
+#[derive(Resource, Clone)]
 pub struct PGAScene {
+    pub name: String,
     pub points: Vec<Point>,
     pub planes: Vec<Plane>,
     pub lines: Vec<Line>,
     pub directions: Vec<Direction>,
 }
 
+impl Default for PGAScene {
+    fn default() -> Self {
+        Self {
+            name: "Unnamed Scene".to_string(),
+            points: Vec::new(),
+            planes: Vec::new(),
+            lines: Vec::new(),
+            directions: Vec::new(),
+        }
+    }
+}
+
 pub fn demo() -> PGAScene {
-    create_scene(SceneType::Demo)
+    create_demo_scene()
 }
 
 impl PGAScene {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Create a scene based on the scene type
-    pub fn from_type(scene_type: SceneType) -> Self {
-        create_scene(scene_type)
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            points: Vec::new(),
+            planes: Vec::new(),
+            lines: Vec::new(),
+            directions: Vec::new(),
+        }
     }
 
     pub fn with_point(mut self, point: Point) -> Self {
@@ -135,41 +124,48 @@ impl PGAScene {
     }
 }
 
-/// Create different scenes based on scene type
-fn create_scene(scene_type: SceneType) -> PGAScene {
-    match scene_type {
-        SceneType::Demo => PGAScene::new()
-            .with_point(Point::new(0.0, 0.0, 0.0)) // Origin
-            .with_point(Point::new(1.0, 1.0, 1.0)) // Corner point
-            .with_point(Point::new(1.0, 0.5, 0.5)) // Another point
-            .with_direction(Direction::new(1.0, 0.0, 0.0)), // X direction
+/// Create different demo scenes
 
-        SceneType::Points => PGAScene::new()
-            .with_point(Point::new(0.0, 0.0, 0.0)) // Origin
-            .with_point(Point::new(1.0, 0.0, 0.0)) // X axis
-            .with_point(Point::new(0.0, 1.0, 0.0)) // Y axis
-            .with_point(Point::new(0.0, 0.0, 1.0)) // Z axis
-            .with_point(Point::new(1.0, 1.0, 1.0)) // Corner
-            .with_point(Point::new(-1.0, -1.0, -1.0)), // Opposite corner
+fn create_demo_scene() -> PGAScene {
+    PGAScene::new("Demo Scene")
+        .with_point(Point::new(0.0, 0.0, 0.0)) // Origin
+        .with_point(Point::new(1.0, 1.0, 1.0)) // Corner point
+        .with_point(Point::new(1.0, 0.5, 0.5)) // Another point
+        .with_direction(Direction::new(1.0, 0.0, 0.0)) // X direction
+}
 
-        SceneType::Lines => PGAScene::new()
-            .with_line(Line::through_origin(1.0, 0.0, 0.0)) // X axis line
-            .with_line(Line::through_origin(0.0, 1.0, 0.0)) // Y axis line
-            .with_line(Line::through_origin(0.0, 0.0, 1.0)) // Z axis line
-            .with_line(Line::through_origin(1.0, 1.0, 0.0)), // Diagonal line
+fn create_points_scene() -> PGAScene {
+    PGAScene::new("Points Only")
+        .with_point(Point::new(0.0, 0.0, 0.0)) // Origin
+        .with_point(Point::new(1.0, 0.0, 0.0)) // X axis
+        .with_point(Point::new(0.0, 1.0, 0.0)) // Y axis
+        .with_point(Point::new(0.0, 0.0, 1.0)) // Z axis
+        .with_point(Point::new(1.0, 1.0, 1.0)) // Corner
+        .with_point(Point::new(-1.0, -1.0, -1.0)) // Opposite corner
+}
 
-        SceneType::Planes => PGAScene::new()
-            .with_plane(Plane::new(1.0, 0.0, 0.0, 1.0)) // X = -1 plane
-            .with_plane(Plane::new(0.0, 1.0, 0.0, 1.0)) // Y = -1 plane
-            .with_plane(Plane::new(0.0, 0.0, 1.0, 1.0)), // Z = -1 plane
+fn create_lines_scene() -> PGAScene {
+    PGAScene::new("Lines Only")
+        .with_line(Line::through_origin(1.0, 0.0, 0.0)) // X axis line
+        .with_line(Line::through_origin(0.0, 1.0, 0.0)) // Y axis line
+        .with_line(Line::through_origin(0.0, 0.0, 1.0)) // Z axis line
+        .with_line(Line::through_origin(1.0, 1.0, 0.0)) // Diagonal line
+}
 
-        SceneType::Mixed => PGAScene::new()
-            .with_point(Point::new(0.0, 0.0, 0.0)) // Origin
-            .with_direction(Direction::new(1.0, 0.0, 0.0)) // X direction
-            .with_direction(Direction::new(0.0, 1.0, 0.0)) // Y direction
-            .with_line(Line::through_origin(1.0, 1.0, 0.0)) // Diagonal line
-            .with_plane(Plane::new(1.0, 0.0, 0.0, 1.0)), // X = -1 plane
-    }
+fn create_planes_scene() -> PGAScene {
+    PGAScene::new("Planes Only")
+        .with_plane(Plane::new(1.0, 0.0, 0.0, 1.0)) // X = -1 plane
+        .with_plane(Plane::new(0.0, 1.0, 0.0, 1.0)) // Y = -1 plane
+        .with_plane(Plane::new(0.0, 0.0, 1.0, 1.0)) // Z = -1 plane
+}
+
+fn create_mixed_scene() -> PGAScene {
+    PGAScene::new("Mixed Objects")
+        .with_point(Point::new(0.0, 0.0, 0.0)) // Origin
+        .with_direction(Direction::new(1.0, 0.0, 0.0)) // X direction
+        .with_direction(Direction::new(0.0, 1.0, 0.0)) // Y direction
+        .with_line(Line::through_origin(1.0, 1.0, 0.0)) // Diagonal line
+        .with_plane(Plane::new(1.0, 0.0, 0.0, 1.0)) // X = -1 plane
 }
 
 /// Bevy app builder for PGA visualization
@@ -193,6 +189,7 @@ impl PGAVisualizationApp {
         })
         .init_gizmo_group::<PGAGizmos>()
         .init_resource::<SceneSelection>()
+        .insert_resource(SceneLibrary::new())
         .add_systems(Startup, (setup_scene, setup_ui))
         .add_systems(Update, draw_pga_gizmos)
         .add_systems(Update, input_map)
@@ -240,11 +237,14 @@ fn handle_scene_reload(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut scene: ResMut<PGAScene>,
     scene_selection: Res<SceneSelection>,
+    scene_library: Res<SceneLibrary>,
 ) {
     if keyboard.just_pressed(KeyCode::Enter) {
         // Clear the existing scene and replace with current selection
-        *scene = create_scene(scene_selection.current);
-        info!("Scene reloaded!");
+        if let Some(selected_scene) = scene_library.get(scene_selection.current_index) {
+            *scene = selected_scene.clone();
+            info!("Scene reloaded!");
+        }
     }
 }
 
@@ -266,14 +266,14 @@ fn setup_ui(mut commands: Commands) {
 /// Update the scene name text when scene changes
 fn update_scene_ui(
     scene_selection: Res<SceneSelection>,
+    scene_library: Res<SceneLibrary>,
     mut query: Query<&mut Text, With<SceneNameText>>,
 ) {
     if scene_selection.is_changed() {
         for mut text in query.iter_mut() {
-            **text = format!(
-                "{}\nPress 1-5 or ←/→ to change",
-                scene_selection.current.name()
-            );
+            if let Some(current_scene) = scene_library.get(scene_selection.current_index) {
+                **text = current_scene.name.clone();
+            }
         }
     }
 }
@@ -283,46 +283,55 @@ fn scene_selection_input(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut scene_selection: ResMut<SceneSelection>,
     mut scene: ResMut<PGAScene>,
+    scene_library: Res<SceneLibrary>,
 ) {
     let mut changed = false;
+    let mut new_index = scene_selection.current_index;
 
     // Use number keys 1-5 to select scene types
     if keyboard.just_pressed(KeyCode::Digit1) {
-        scene_selection.current = SceneType::Demo;
+        new_index = 0;
         changed = true;
     } else if keyboard.just_pressed(KeyCode::Digit2) {
-        scene_selection.current = SceneType::Points;
+        new_index = 1;
         changed = true;
     } else if keyboard.just_pressed(KeyCode::Digit3) {
-        scene_selection.current = SceneType::Lines;
+        new_index = 2;
         changed = true;
     } else if keyboard.just_pressed(KeyCode::Digit4) {
-        scene_selection.current = SceneType::Planes;
+        new_index = 3;
         changed = true;
     } else if keyboard.just_pressed(KeyCode::Digit5) {
-        scene_selection.current = SceneType::Mixed;
+        new_index = 4;
         changed = true;
     }
     // Use arrow keys to cycle through scenes
     else if keyboard.just_pressed(KeyCode::ArrowRight)
         || keyboard.just_pressed(KeyCode::BracketRight)
     {
-        scene_selection.current = scene_selection.current.next();
+        new_index = (scene_selection.current_index + 1) % scene_library.len();
         changed = true;
     } else if keyboard.just_pressed(KeyCode::ArrowLeft)
         || keyboard.just_pressed(KeyCode::BracketLeft)
     {
-        scene_selection.current = scene_selection.current.previous();
+        new_index = if scene_selection.current_index == 0 {
+            scene_library.len() - 1
+        } else {
+            scene_selection.current_index - 1
+        };
         changed = true;
     }
 
-    if changed {
-        *scene = create_scene(scene_selection.current);
-        info!(
-            "Scene changed to: {} ({})",
-            scene_selection.current.name(),
-            scene_selection.current as u8 + 1
-        );
+    if changed && new_index < scene_library.len() {
+        scene_selection.current_index = new_index;
+        if let Some(selected_scene) = scene_library.get(new_index) {
+            *scene = selected_scene.clone();
+            info!(
+                "Scene changed to: {} ({})",
+                selected_scene.name,
+                new_index + 1
+            );
+        }
     }
 }
 
