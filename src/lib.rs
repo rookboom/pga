@@ -19,6 +19,136 @@ use pga3d::PGA3D;
 
 use crate::pga3d::I;
 
+/// Trait for approximate equality comparisons, useful for floating-point tests
+pub trait ApproxEq {
+    /// Check if two values are approximately equal within a default epsilon
+    fn approx_eq(&self, other: &Self) -> bool;
+
+    /// Check if two values are approximately equal within a specified epsilon
+    fn approx_eq_eps(&self, other: &Self, epsilon: f32) -> bool;
+}
+
+impl ApproxEq for f32 {
+    fn approx_eq(&self, other: &Self) -> bool {
+        self.approx_eq_eps(other, 1e-6)
+    }
+
+    fn approx_eq_eps(&self, other: &Self, epsilon: f32) -> bool {
+        (self - other).abs() < epsilon
+    }
+}
+
+impl ApproxEq for PGA3D {
+    fn approx_eq(&self, other: &Self) -> bool {
+        self.approx_eq_eps(other, 1e-6)
+    }
+
+    fn approx_eq_eps(&self, other: &Self, epsilon: f32) -> bool {
+        self.mvec
+            .iter()
+            .zip(other.mvec.iter())
+            .all(|(a, b)| a.approx_eq_eps(b, epsilon))
+    }
+}
+
+impl ApproxEq for Point {
+    fn approx_eq(&self, other: &Self) -> bool {
+        self.0.approx_eq(&other.0)
+    }
+
+    fn approx_eq_eps(&self, other: &Self, epsilon: f32) -> bool {
+        self.0.approx_eq_eps(&other.0, epsilon)
+    }
+}
+
+impl ApproxEq for Line {
+    fn approx_eq(&self, other: &Self) -> bool {
+        self.0.approx_eq(&other.0)
+    }
+
+    fn approx_eq_eps(&self, other: &Self, epsilon: f32) -> bool {
+        self.0.approx_eq_eps(&other.0, epsilon)
+    }
+}
+
+impl ApproxEq for Plane {
+    fn approx_eq(&self, other: &Self) -> bool {
+        self.0.approx_eq(&other.0)
+    }
+
+    fn approx_eq_eps(&self, other: &Self, epsilon: f32) -> bool {
+        self.0.approx_eq_eps(&other.0, epsilon)
+    }
+}
+
+impl ApproxEq for Direction {
+    fn approx_eq(&self, other: &Self) -> bool {
+        self.0.approx_eq(&other.0)
+    }
+
+    fn approx_eq_eps(&self, other: &Self, epsilon: f32) -> bool {
+        self.0.approx_eq_eps(&other.0, epsilon)
+    }
+}
+
+/// Macro for asserting approximate equality in tests
+#[macro_export]
+macro_rules! assert_approx_eq {
+    ($left:expr, $right:expr) => {
+        match (&$left, &$right) {
+            (left_val, right_val) => {
+                if !left_val.approx_eq(right_val) {
+                    panic!(
+                        "assertion failed: `(left approx== right)`\n  left: `{:?}`\n right: `{:?}`",
+                        left_val, right_val
+                    );
+                }
+            }
+        }
+    };
+    ($left:expr, $right:expr, $epsilon:expr) => {
+        match (&$left, &$right, &$epsilon) {
+            (left_val, right_val, epsilon_val) => {
+                if !left_val.approx_eq_eps(right_val, *epsilon_val) {
+                    panic!(
+                        "assertion failed: `(left approx== right)` with epsilon `{}`\n  left: `{:?}`\n right: `{:?}`",
+                        epsilon_val, left_val, right_val
+                    );
+                }
+            }
+        }
+    };
+}
+
+/// Macro for asserting approximate inequality in tests
+#[macro_export]
+macro_rules! assert_approx_ne {
+    ($left:expr, $right:expr) => {
+        match (&$left, &$right) {
+            (left_val, right_val) => {
+                if left_val.approx_eq(right_val) {
+                    panic!(
+                        "assertion failed: `(left approx!= right)`\n  left: `{:?}`\n right: `{:?}`",
+                        left_val, right_val
+                    );
+                }
+            }
+        }
+    };
+    ($left:expr, $right:expr, $epsilon:expr) => {
+        match (&$left, &$right, &$epsilon) {
+            (left_val, right_val, epsilon_val) => {
+                if left_val.approx_eq_eps(right_val, *epsilon_val) {
+                    panic!(
+                        "assertion failed: `(left approx!= right)` with epsilon `{}`\n  left: `{:?}`\n right: `{:?}`",
+                        epsilon_val, left_val, right_val
+                    );
+                }
+            }
+        }
+    };
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Point(PGA3D);
 #[derive(Debug, Clone, Copy, PartialEq)]

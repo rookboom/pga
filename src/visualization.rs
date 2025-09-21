@@ -32,7 +32,7 @@ impl SceneLibrary {
     pub fn new() -> Self {
         Self {
             scenes: vec![
-                create_demo_scene(),
+                create_two_points_join_in_a_line(),
                 create_points_scene(),
                 create_lines_scene(),
                 create_planes_scene(),
@@ -89,7 +89,7 @@ impl Default for PGAScene {
 }
 
 pub fn demo() -> PGAScene {
-    create_demo_scene()
+    create_two_points_join_in_a_line()
 }
 
 impl PGAScene {
@@ -126,12 +126,16 @@ impl PGAScene {
 
 /// Create different demo scenes
 
-fn create_demo_scene() -> PGAScene {
-    PGAScene::new("Demo Scene")
-        .with_point(Point::new(0.0, 0.0, 0.0)) // Origin
-        .with_point(Point::new(1.0, 1.0, 1.0)) // Corner point
-        .with_point(Point::new(1.0, 0.5, 0.5)) // Another point
-        .with_direction(Direction::new(1.0, 0.0, 0.0)) // X direction
+fn create_two_points_join_in_a_line() -> PGAScene {
+    let p0 = Point::new(0.0, 0.0, 0.0);
+    let p1 = Point::new(1.0, 0.0, 0.0);
+    let line1: Option<Line> = p0 & p1;
+    assert!(line1.is_some());
+
+    PGAScene::new("Two Points Join in a Line")
+        .with_point(p0)
+        .with_point(p1)
+        .with_line(line1.unwrap())
 }
 
 fn create_points_scene() -> PGAScene {
@@ -409,13 +413,13 @@ fn draw_pga_line(gizmos: &mut Gizmos<PGAGizmos>, line: Line, color: LinearRgba) 
     let pga = line.0;
 
     // Extract direction and moment components
-    let dir_x = pga.mvec[9]; // e31
-    let dir_y = pga.mvec[10]; // e23
+    let dir_x = pga.mvec[10]; // e31
+    let dir_y = pga.mvec[9]; // e23
     let dir_z = pga.mvec[8]; // e12
 
-    let mom_x = pga.mvec[6]; // e02
-    let mom_y = pga.mvec[7]; // e03
-    let mom_z = pga.mvec[5]; // e01
+    let mom_x = pga.mvec[5]; // e02
+    let mom_y = pga.mvec[6]; // e03
+    let mom_z = pga.mvec[7]; // e01
 
     let direction = Vec3::new(dir_x, dir_y, dir_z);
     let moment = Vec3::new(mom_x, mom_y, mom_z);

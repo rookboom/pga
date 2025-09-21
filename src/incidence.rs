@@ -83,6 +83,8 @@ impl BitXor<Line> for Plane {
 
 #[cfg(test)]
 mod tests {
+    use crate::{ApproxEq, assert_approx_eq};
+
     use super::*;
 
     #[test]
@@ -136,9 +138,13 @@ mod tests {
         let p0 = Point::new(0.0, 0.0, 0.0);
         let p1 = Point::new(1.0, 0.0, 0.0);
         let line: Line = (p0 & p1).unwrap();
-        let point = Plane::E1 ^ line;
+        // Use a plane that doesn't pass through the origin: x = 0.5
+        let plane = Plane::new(1.0, 0.0, 0.0, -0.5);
+        let point = plane ^ line;
         assert_ne!(point.0, PGA3D::zero());
-        assert_ne!(point, p0);
+        // The intersection should be at (0.5, 0, 0)
+        let expected = Point::new(0.5, 0.0, 0.0);
+        assert_approx_eq!(point, expected);
     }
 
     #[test]
