@@ -39,12 +39,19 @@ jobs:
     
     - name: Build WebAssembly
       run: |
-        wasm-pack build --target web --out-dir web/pkg --features web
+        wasm-pack build --target web --out-dir web/pkg --features web --release
+    
+    - name: Verify build output
+      run: |
+        ls -la web/
+        ls -la web/pkg/
     
     - name: Setup Pages
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
       uses: actions/configure-pages@v4
     
     - name: Upload artifact
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
       uses: actions/upload-pages-artifact@v3
       with:
         path: './web'
