@@ -1,60 +1,25 @@
-use bevy::{gizmos::config::GizmoConfigGroup, prelude::*};
+//! PGA Visualization module
+//!
+//! This module provides 3D visualization capabilities for Projective Geometric Algebra objects
+//! using the Bevy game engine.
+
+use bevy::{
+    gizmos::config::GizmoConfigGroup,
+    input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel},
+    prelude::*,
+};
+use smooth_bevy_cameras::{
+    LookTransformPlugin,
+    controllers::orbit::{
+        ControlEvent, OrbitCameraBundle, OrbitCameraController, OrbitCameraPlugin,
+    },
+};
 
 use crate::{Direction, Line, Plane, Point};
 
 /// Configuration for the PGA visualization
 #[derive(Default, Reflect, GizmoConfigGroup)]
 pub struct PGAGizmos;
-
-/// Bevy app builder for PGA visualization
-pub struct PGAVisualizationApp;
-
-impl PGAVisualizationApp {
-    /// Creates a new Bevy app configured for PGA visualization
-    pub fn new() -> App {
-        let mut app = App::new();
-        app.add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "PGA Geometric Algebra Visualization".to_string(),
-                resolution: (1280.0, 720.0).into(),
-                ..default()
-            }),
-            ..default()
-        }))
-        .init_gizmo_group::<PGAGizmos>()
-        .add_systems(Startup, setup_scene)
-        .add_systems(Update, (update_camera_controller, draw_pga_gizmos));
-
-        app
-    }
-
-    /// Runs the visualization app
-    pub fn run(self) {
-        Self::new().run();
-    }
-}
-
-/// Camera controller component for orbiting around the scene
-#[derive(Component)]
-pub struct CameraController {
-    pub radius: f32,
-    pub theta: f32,
-    pub phi: f32,
-    pub target: Vec3,
-    pub sensitivity: f32,
-}
-
-impl Default for CameraController {
-    fn default() -> Self {
-        Self {
-            radius: 5.0,
-            theta: 0.0,
-            phi: std::f32::consts::PI / 4.0,
-            target: Vec3::ZERO,
-            sensitivity: 2.0,
-        }
-    }
-}
 
 /// Resource containing PGA objects to visualize
 #[derive(Resource, Default)]
@@ -119,14 +84,49 @@ impl PGAScene {
     }
 }
 
+/// Bevy app builder for PGA visualization
+pub struct PGAVisualizationApp;
+
+impl PGAVisualizationApp {
+    /// Creates a new Bevy app configured for PGA visualization
+    pub fn new() -> App {
+        let mut app = App::new();
+        app.add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                title: "PGA Geometric Algebra Visualization".to_string(),
+                resolution: (1280.0, 720.0).into(),
+                ..default()
+            }),
+            ..default()
+        }))
+        .add_plugins(LookTransformPlugin)
+        .add_plugins(OrbitCameraPlugin {
+            override_input_system: true,
+        })
+        .init_gizmo_group::<PGAGizmos>()
+        .add_systems(Startup, setup_scene)
+        .add_systems(Update, draw_pga_gizmos)
+        .add_systems(Update, input_map);
+
+        app
+    }
+
+    /// Runs the visualization app
+    pub fn run(self) {
+        Self::new().run();
+    }
+}
+
 /// Setup the initial scene with camera and lighting
 fn setup_scene(mut commands: Commands) {
-    // Add a camera with orbit controller
-    commands.spawn((
-        Camera3d::default(),
-        Transform::from_translation(Vec3::new(5.0, 3.0, 5.0)).looking_at(Vec3::ZERO, Vec3::Y),
-        CameraController::default(),
-    ));
+    commands
+        .spawn(Camera3d::default())
+        .insert(OrbitCameraBundle::new(
+            OrbitCameraController::default(),
+            Vec3::new(3.0, 3.0, 3.0),
+            Vec3::new(0., 0., 0.),
+            Vec3::Y,
+        ));
 
     // Add basic lighting
     commands.spawn((
@@ -154,50 +154,6 @@ fn setup_scene(mut commands: Commands) {
     scene.add_point(Point::new(0.0, 0.0, 0.0));
 
     commands.insert_resource(scene);
-}
-
-/// Simple camera controller for orbiting around the scene
-fn update_camera_controller(
-    time: Res<Time>,
-    mut query: Query<(&mut Transform, &mut CameraController)>,
-    input: Res<ButtonInput<KeyCode>>,
-) {
-    for (mut transform, mut controller) in query.iter_mut() {
-        let dt = time.delta_secs();
-
-        // Rotate camera around the target
-        if input.pressed(KeyCode::ArrowLeft) {
-            controller.theta -= controller.sensitivity * dt;
-        }
-        if input.pressed(KeyCode::ArrowRight) {
-            controller.theta += controller.sensitivity * dt;
-        }
-        if input.pressed(KeyCode::ArrowUp) {
-            controller.phi = (controller.phi - controller.sensitivity * dt)
-                .clamp(0.1, std::f32::consts::PI - 0.1);
-        }
-        if input.pressed(KeyCode::ArrowDown) {
-            controller.phi = (controller.phi + controller.sensitivity * dt)
-                .clamp(0.1, std::f32::consts::PI - 0.1);
-        }
-
-        // Zoom in/out
-        if input.pressed(KeyCode::Equal) || input.pressed(KeyCode::NumpadAdd) {
-            controller.radius = (controller.radius - 5.0 * dt).max(1.0);
-        }
-        if input.pressed(KeyCode::Minus) {
-            controller.radius += 5.0 * dt;
-        }
-
-        // Calculate new camera position
-        let x = controller.radius * controller.phi.sin() * controller.theta.cos();
-        let y = controller.radius * controller.phi.cos();
-        let z = controller.radius * controller.phi.sin() * controller.theta.sin();
-
-        let position = controller.target + Vec3::new(x, y, z);
-        transform.translation = position;
-        transform.look_at(controller.target, Vec3::Y);
-    }
 }
 
 /// System to draw PGA objects using Bevy's gizmo API
@@ -373,4 +329,45 @@ fn draw_pga_plane(gizmos: &mut Gizmos<PGAGizmos>, plane: Plane, color: LinearRgb
 
     // Draw normal vector
     gizmos.arrow(point_on_plane, point_on_plane + normal * 1.0, color);
+}
+
+pub fn input_map(
+    mut events: EventWriter<ControlEvent>,
+    mut mouse_wheel_reader: EventReader<MouseWheel>,
+    mut mouse_motion_events: EventReader<MouseMotion>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
+    controllers: Query<&OrbitCameraController>,
+) {
+    // Can only control one camera at a time.
+    let controller = if let Some(controller) = controllers.iter().find(|c| c.enabled) {
+        controller
+    } else {
+        return;
+    };
+    let OrbitCameraController {
+        mouse_rotate_sensitivity,
+        mouse_wheel_zoom_sensitivity,
+        pixels_per_line,
+        ..
+    } = *controller;
+
+    let mut cursor_delta = Vec2::ZERO;
+    for event in mouse_motion_events.read() {
+        cursor_delta += event.delta;
+    }
+
+    if mouse_buttons.pressed(MouseButton::Left) {
+        events.write(ControlEvent::Orbit(mouse_rotate_sensitivity * cursor_delta));
+    }
+
+    let mut scalar = 1.0;
+    for event in mouse_wheel_reader.read() {
+        // scale the event magnitude per pixel or per line
+        let scroll_amount = match event.unit {
+            MouseScrollUnit::Line => event.y,
+            MouseScrollUnit::Pixel => event.y / pixels_per_line,
+        };
+        scalar *= 1.0 - scroll_amount * mouse_wheel_zoom_sensitivity;
+    }
+    events.write(ControlEvent::Zoom(scalar));
 }
