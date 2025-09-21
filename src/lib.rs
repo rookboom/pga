@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 mod incidence;
 mod pga3d;
 mod project_reject;
@@ -29,10 +30,10 @@ pub struct Line(PGA3D);
 pub struct Plane(PGA3D);
 
 impl Point {
-    const origin: Point = Point(pga3d::e123);
-    const x1: Point = Point(pga3d::e123.with(13, 1.0));
-    const y1: Point = Point(pga3d::e123.with(12, 1.0));
-    const z1: Point = Point(pga3d::e123.with(11, 1.0));
+    const ORIGIN: Point = Point(pga3d::e123);
+    const X1: Point = Point(pga3d::e123.with(13, 1.0));
+    const Y1: Point = Point(pga3d::e123.with(12, 1.0));
+    const Z1: Point = Point(pga3d::e123.with(11, 1.0));
 
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         Point(PGA3D::point(x, y, z))
@@ -40,12 +41,12 @@ impl Point {
 }
 
 impl Plane {
-    const e1: Plane = Plane(PGA3D::new(1.0, 2));
-    const e2: Plane = Plane(PGA3D::new(1.0, 3));
-    const e3: Plane = Plane(PGA3D::new(1.0, 4));
-    const left: Plane = Self::e1;
-    const up: Plane = Self::e2;
-    const forward: Plane = Self::e3;
+    const E1: Plane = Plane(PGA3D::new(1.0, 2));
+    const E2: Plane = Plane(PGA3D::new(1.0, 3));
+    const E3: Plane = Plane(PGA3D::new(1.0, 4));
+    const LEFT: Plane = Self::E1;
+    const UP: Plane = Self::E2;
+    const FORWARD: Plane = Self::E3;
     pub fn new(a: f32, b: f32, c: f32, d: f32) -> Self {
         Plane(PGA3D::plane(a, b, c, d))
     }
@@ -56,9 +57,9 @@ impl Plane {
 }
 
 impl Line {
-    const z_axis: Line = Line(pga3d::e12);
-    const x_axis: Line = Line(pga3d::e23);
-    const y_axis: Line = Line(pga3d::e31);
+    const Z_AXIS: Line = Line(pga3d::e12);
+    const X_AXIS: Line = Line(pga3d::e23);
+    const Y_AXIS: Line = Line(pga3d::e31);
 
     pub fn new(
         dir_x: f32,
@@ -121,9 +122,9 @@ impl Line {
 
 /// Right-handed y-up coordinate system
 impl Direction {
-    const up: Direction = Direction(pga3d::e013);
-    const left: Direction = Direction(pga3d::e032);
-    const forward: Direction = Direction(pga3d::e021);
+    const UP: Direction = Direction(pga3d::e013);
+    const LEFT: Direction = Direction(pga3d::e032);
+    const FORWARD: Direction = Direction(pga3d::e021);
 
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         Direction(PGA3D::direction(x, y, z))
@@ -186,16 +187,16 @@ mod tests {
 
     #[test]
     fn ideal_line_perpendicular_to_line() {
-        let line = (Plane::new(0.0, 0.0, 1.0, 1.0) ^ Plane::up).unwrap();
+        let line = (Plane::new(0.0, 0.0, 1.0, 1.0) ^ Plane::UP).unwrap();
         assert_eq!(Line::ideal(0.0, 0.0, 1.0), line.perpendicular_line());
-        let line = (Plane::forward ^ Plane::up).unwrap();
+        let line = (Plane::FORWARD ^ Plane::UP).unwrap();
         assert_eq!(Line::ideal(0.0, 0.0, 1.0), line.perpendicular_line());
     }
 
     #[test]
     fn line_axes() {
-        assert_eq!(Line::z_axis, (Plane::left ^ Plane::up).unwrap());
-        assert_eq!(Line::y_axis, (Plane::forward ^ Plane::left).unwrap());
-        assert_eq!(Line::x_axis, (Plane::up ^ Plane::forward).unwrap());
+        assert_eq!(Line::Z_AXIS, (Plane::LEFT ^ Plane::UP).unwrap());
+        assert_eq!(Line::Y_AXIS, (Plane::FORWARD ^ Plane::LEFT).unwrap());
+        assert_eq!(Line::X_AXIS, (Plane::UP ^ Plane::FORWARD).unwrap());
     }
 }

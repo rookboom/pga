@@ -120,13 +120,13 @@ mod tests {
 
     #[test]
     fn two_planes_meet_in_a_line() {
-        let line: Option<Line> = Plane::e1 ^ Plane::e2;
+        let line: Option<Line> = Plane::E1 ^ Plane::E2;
         assert!(line.is_some());
     }
 
     #[test]
     fn three_planes_meet_in_a_point() {
-        let origin: Option<Point> = Plane::e1 ^ Plane::e2 ^ Plane::e3;
+        let origin: Option<Point> = Plane::E1 ^ Plane::E2 ^ Plane::E3;
         assert!(origin.is_some());
         assert_eq!(origin, Some(Point::new(0.0, 0.0, 0.0)));
     }
@@ -136,7 +136,7 @@ mod tests {
         let p0 = Point::new(0.0, 0.0, 0.0);
         let p1 = Point::new(1.0, 0.0, 0.0);
         let line: Line = (p0 & p1).unwrap();
-        let point = Plane::e1 ^ line;
+        let point = Plane::E1 ^ line;
         assert_ne!(point.0, PGA3D::zero());
         assert_ne!(point, p0);
     }

@@ -11,8 +11,7 @@ use std::ops::{Add, BitAnd, BitOr, BitXor, Index, IndexMut, Mul, Not, Sub};
 
 type float_t = f32;
 
-// use std::f64::consts::PI;
-const PI: float_t = 3.141_592_7;
+use std::f32::consts::PI;
 
 const basis: &[&str] = &[
     "1", "e0", "e1", "e2", "e3", "e01", "e02", "e03", "e12", "e31", "e23", "e021", "e013", "e032",
