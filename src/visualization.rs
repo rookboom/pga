@@ -151,7 +151,6 @@ fn create_two_points_join_in_a_line() -> PGAScene {
                 if let Some(line) = p0 & p1 {
                     scene.with_line(line)
                 } else {
-                    info!("Failed to create line from points");
                     scene
                 }
             }
@@ -250,18 +249,6 @@ fn setup_scene(mut commands: Commands) {
         ));
 
     commands.insert_resource(demo());
-
-    // Print controls
-    info!("=== PGA Visualization Controls ===");
-    info!("Scene Selection:");
-    info!("  1-5: Select scene type directly");
-    info!("  [ / ]: Previous scene");
-    info!("  ] / →: Next scene");
-    info!("Camera Controls:");
-    info!("  Left mouse + drag: Orbit camera");
-    info!("  Mouse wheel: Zoom in/out");
-    info!("Other:");
-    info!("  Enter: Reload current scene");
 }
 
 /// System to handle scene reloading when Enter is pressed
@@ -275,7 +262,6 @@ fn handle_scene_reload(
         // Clear the existing scene and replace with current selection
         if let Some(selected_scene) = scene_library.get(scene_selection.current_index) {
             *scene = selected_scene.clone();
-            info!("Scene reloaded!");
         }
     }
 }
@@ -339,11 +325,6 @@ fn scene_selection_input(
         scene_selection.current_index = new_index;
         if let Some(selected_scene) = scene_library.get(new_index) {
             *scene = selected_scene.clone();
-            info!(
-                "Scene changed to: {} ({})",
-                selected_scene.name,
-                new_index + 1
-            );
         }
     }
 }
@@ -524,7 +505,18 @@ pub fn input_map(
     mut mouse_motion_events: EventReader<MouseMotion>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     controllers: Query<&OrbitCameraController>,
+    mut contexts: EguiContexts,
 ) {
+    // Check if egui is using the mouse - if so, don't process camera input
+    if let Ok(ctx) = contexts.ctx_mut() {
+        if ctx.is_pointer_over_area() || ctx.wants_pointer_input() {
+            // Clear the events to prevent camera movement when interacting with egui
+            for _ in mouse_motion_events.read() {}
+            for _ in mouse_wheel_reader.read() {}
+            return;
+        }
+    }
+
     // Can only control one camera at a time.
     let controller = if let Some(controller) = controllers.iter().find(|c| c.enabled) {
         controller
@@ -630,9 +622,6 @@ fn update_label_positions(
         } else {
             // Hide the label if the point is behind the camera
             node.display = Display::None;
-            if *index == 0 {
-                info!("Point {} is behind camera, hiding label", index);
-            }
         }
     }
 }
@@ -698,7 +687,6 @@ fn coordinate_editor_ui(mut contexts: EguiContexts, mut scene: ResMut<PGAScene>)
                 }
 
                 if points_changed {
-                    info!("Point coordinates updated");
                     scene.reset_non_points();
                     *scene = (scene.builder)(scene.clone());
                 }
