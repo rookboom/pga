@@ -8,6 +8,7 @@ use bevy::{
     input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel},
     prelude::*,
 };
+use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui};
 use smooth_bevy_cameras::{
     LookTransformPlugin,
     controllers::orbit::{
@@ -67,7 +68,7 @@ impl Default for SceneSelection {
 struct SceneNameText;
 
 #[derive(Component)]
-struct PointLabel(Vec3);
+struct PointLabel(usize);
 
 /// Resource containing PGA objects to visualize
 #[derive(Resource, Clone)]
@@ -77,6 +78,7 @@ pub struct PGAScene {
     pub planes: Vec<Plane>,
     pub lines: Vec<Line>,
     pub directions: Vec<Direction>,
+    pub builder: fn(scene: PGAScene) -> PGAScene,
 }
 
 impl Default for PGAScene {
@@ -87,6 +89,7 @@ impl Default for PGAScene {
             planes: Vec::new(),
             lines: Vec::new(),
             directions: Vec::new(),
+            builder: |_| PGAScene::default(),
         }
     }
 }
@@ -96,13 +99,14 @@ pub fn demo() -> PGAScene {
 }
 
 impl PGAScene {
-    pub fn new(name: impl Into<String>) -> Self {
+    pub fn new(name: impl Into<String>, builder: fn(PGAScene) -> PGAScene) -> Self {
         Self {
             name: name.into(),
             points: Vec::new(),
             planes: Vec::new(),
             lines: Vec::new(),
             directions: Vec::new(),
+            builder,
         }
     }
 
@@ -125,6 +129,12 @@ impl PGAScene {
         self.directions.push(direction);
         self
     }
+
+    pub fn reset_non_points(&mut self) {
+        self.planes.clear();
+        self.lines.clear();
+        self.directions.clear();
+    }
 }
 
 /// Create different demo scenes
@@ -135,10 +145,21 @@ fn create_two_points_join_in_a_line() -> PGAScene {
     let line1: Option<Line> = &p0 & &p1;
     assert!(line1.is_some());
 
-    PGAScene::new("Two points join in a line (P0 V P1)")
-        .with_point("P0", p0)
-        .with_point("P1", p1)
-        .with_line(line1.unwrap())
+    PGAScene::new("Two points join in a line (P0 V P1)", |scene| {
+        match scene.points.as_slice() {
+            [(_, p0), (_, p1)] => {
+                if let Some(line) = p0 & p1 {
+                    scene.with_line(line)
+                } else {
+                    info!("Failed to create line from points");
+                    scene
+                }
+            }
+            _ => scene,
+        }
+    })
+    .with_point("P0", p0)
+    .with_point("P1", p1)
 }
 
 // fn create_points_scene() -> PGAScene {
@@ -194,6 +215,7 @@ impl PGAVisualizationApp {
         .add_plugins(OrbitCameraPlugin {
             override_input_system: true,
         })
+        .add_plugins(EguiPlugin::default())
         .init_gizmo_group::<PGAGizmos>()
         .init_resource::<SceneSelection>()
         .insert_resource(SceneLibrary::new())
@@ -203,8 +225,9 @@ impl PGAVisualizationApp {
         .add_systems(Update, handle_scene_reload)
         .add_systems(Update, scene_selection_input)
         .add_systems(Update, update_scene_ui)
-        .add_systems(Update, update_label_positions)
-        .add_systems(Update, update_point_labels);
+        .add_systems(Update, update_point_labels)
+        .add_systems(PostUpdate, update_label_positions)
+        .add_systems(EguiPrimaryContextPass, coordinate_editor_ui);
 
         app
     }
@@ -554,7 +577,7 @@ fn update_point_labels(
         }
 
         // Create new labels for current scene points
-        for (label_text, point) in scene.points.iter() {
+        for (index, (label_text, _)) in scene.points.iter().enumerate() {
             commands.spawn((
                 Text::new(label_text),
                 Node {
@@ -563,25 +586,122 @@ fn update_point_labels(
                     top: Val::Px(0.0),
                     ..default()
                 },
-                PointLabel(pga_point_to_vec3(point)),
+                ZIndex(1000), // Ensure labels appear on top
+                PointLabel(index),
             ));
         }
     }
 }
 
 fn update_label_positions(
-    mut camera: Query<(&mut Camera, &GlobalTransform), With<Camera3d>>,
+    camera_query: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
     mut labels: Query<(&mut Node, &PointLabel)>,
+    scene: Res<PGAScene>,
+    windows: Query<&Window>,
 ) {
-    let Ok((camera, camera_global_transform)) = camera.single_mut() else {
+    let Ok((camera, camera_global_transform)) = camera_query.single() else {
         return;
     };
 
-    for (mut node, PointLabel(world_position)) in labels.iter_mut() {
-        let viewport_position = camera
-            .world_to_viewport(camera_global_transform, *world_position)
-            .unwrap();
-        node.left = Val::Px(viewport_position.x);
-        node.top = Val::Px(viewport_position.y);
+    let Ok(window) = windows.single() else {
+        return;
+    };
+
+    for (mut node, PointLabel(index)) in labels.iter_mut() {
+        let Some(point) = scene.points.get(*index).map(|(_, p)| p) else {
+            continue;
+        };
+
+        let world_position = pga_point_to_vec3(point);
+
+        // Get viewport position and handle the case where point is behind camera
+        if let Ok(viewport_position) =
+            camera.world_to_viewport(camera_global_transform, world_position)
+        {
+            // Clamp positions to ensure they stay within reasonable bounds
+            let clamped_x = viewport_position.x.clamp(0.0, window.width() - 100.0);
+            let clamped_y = viewport_position.y.clamp(0.0, window.height() - 30.0);
+
+            node.left = Val::Px(clamped_x);
+            node.top = Val::Px(clamped_y);
+
+            // Make sure the node is visible
+            node.display = Display::Flex;
+        } else {
+            // Hide the label if the point is behind the camera
+            node.display = Display::None;
+            if *index == 0 {
+                info!("Point {} is behind camera, hiding label", index);
+            }
+        }
+    }
+}
+
+/// System to display coordinate editor UI for points
+fn coordinate_editor_ui(mut contexts: EguiContexts, mut scene: ResMut<PGAScene>) {
+    // Get the primary window context
+    if let Ok(ctx) = contexts.ctx_mut() {
+        egui::Window::new("Point Coordinates")
+            .default_open(true)
+            .resizable(true)
+            .show(ctx, |ui| {
+                ui.heading("Edit Point Coordinates");
+                ui.separator();
+
+                let mut points_changed = false;
+
+                // Create a list of points with editable coordinates
+                for (_index, (name, point)) in scene.points.iter_mut().enumerate() {
+                    ui.group(|ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(format!("{}:", name));
+                        });
+
+                        ui.horizontal(|ui| {
+                            // Extract current coordinates
+                            let current_pos = pga_point_to_vec3(point);
+                            let mut x = current_pos.x;
+                            let mut y = current_pos.y;
+                            let mut z = current_pos.z;
+
+                            ui.label("X:");
+                            if ui
+                                .add(egui::DragValue::new(&mut x).speed(0.1).range(-10.0..=10.0))
+                                .changed()
+                            {
+                                points_changed = true;
+                            }
+
+                            ui.label("Y:");
+                            if ui
+                                .add(egui::DragValue::new(&mut y).speed(0.1).range(-10.0..=10.0))
+                                .changed()
+                            {
+                                points_changed = true;
+                            }
+
+                            ui.label("Z:");
+                            if ui
+                                .add(egui::DragValue::new(&mut z).speed(0.1).range(-10.0..=10.0))
+                                .changed()
+                            {
+                                points_changed = true;
+                            }
+
+                            // Update the point if any coordinate changed
+                            if points_changed {
+                                *point = Point::new(x, y, z);
+                            }
+                        });
+                    });
+                    ui.separator();
+                }
+
+                if points_changed {
+                    info!("Point coordinates updated");
+                    scene.reset_non_points();
+                    *scene = (scene.builder)(scene.clone());
+                }
+            });
     }
 }
