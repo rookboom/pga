@@ -33,10 +33,10 @@ impl SceneLibrary {
         Self {
             scenes: vec![
                 create_two_points_join_in_a_line(),
-                create_points_scene(),
-                create_lines_scene(),
-                create_planes_scene(),
-                create_mixed_scene(),
+                // create_points_scene(),
+                // create_lines_scene(),
+                // create_planes_scene(),
+                // create_mixed_scene(),
             ],
         }
     }
@@ -66,11 +66,14 @@ impl Default for SceneSelection {
 #[derive(Component)]
 struct SceneNameText;
 
+#[derive(Component)]
+struct PointLabel(Vec3);
+
 /// Resource containing PGA objects to visualize
 #[derive(Resource, Clone)]
 pub struct PGAScene {
     pub name: String,
-    pub points: Vec<Point>,
+    pub points: Vec<(String, Point)>,
     pub planes: Vec<Plane>,
     pub lines: Vec<Line>,
     pub directions: Vec<Direction>,
@@ -103,8 +106,8 @@ impl PGAScene {
         }
     }
 
-    pub fn with_point(mut self, point: Point) -> Self {
-        self.points.push(point);
+    pub fn with_point(mut self, name: &str, point: Point) -> Self {
+        self.points.push((name.to_string(), point));
         self
     }
 
@@ -132,45 +135,45 @@ fn create_two_points_join_in_a_line() -> PGAScene {
     let line1: Option<Line> = &p0 & &p1;
     assert!(line1.is_some());
 
-    PGAScene::new("Two Points Join in a Line")
-        .with_point(p0)
-        .with_point(p1)
+    PGAScene::new("Two points join in a line (P0 V P1)")
+        .with_point("P0", p0)
+        .with_point("P1", p1)
         .with_line(line1.unwrap())
 }
 
-fn create_points_scene() -> PGAScene {
-    PGAScene::new("Points Only")
-        .with_point(Point::new(0.0, 0.0, 0.0)) // Origin
-        .with_point(Point::new(1.0, 0.0, 0.0)) // X axis
-        .with_point(Point::new(0.0, 1.0, 0.0)) // Y axis
-        .with_point(Point::new(0.0, 0.0, 1.0)) // Z axis
-        .with_point(Point::new(1.0, 1.0, 1.0)) // Corner
-        .with_point(Point::new(-1.0, -1.0, -1.0)) // Opposite corner
-}
+// fn create_points_scene() -> PGAScene {
+//     PGAScene::new("Points Only")
+//         .with_point(Point::new(0.0, 0.0, 0.0)) // Origin
+//         .with_point(Point::new(1.0, 0.0, 0.0)) // X axis
+//         .with_point(Point::new(0.0, 1.0, 0.0)) // Y axis
+//         .with_point(Point::new(0.0, 0.0, 1.0)) // Z axis
+//         .with_point(Point::new(1.0, 1.0, 1.0)) // Corner
+//         .with_point(Point::new(-1.0, -1.0, -1.0)) // Opposite corner
+// }
 
-fn create_lines_scene() -> PGAScene {
-    PGAScene::new("Lines Only")
-        .with_line(Line::through_origin(1.0, 0.0, 0.0)) // X axis line
-        .with_line(Line::through_origin(0.0, 1.0, 0.0)) // Y axis line
-        .with_line(Line::through_origin(0.0, 0.0, 1.0)) // Z axis line
-        .with_line(Line::through_origin(1.0, 1.0, 0.0)) // Diagonal line
-}
+// fn create_lines_scene() -> PGAScene {
+//     PGAScene::new("Lines Only")
+//         .with_line(Line::through_origin(1.0, 0.0, 0.0)) // X axis line
+//         .with_line(Line::through_origin(0.0, 1.0, 0.0)) // Y axis line
+//         .with_line(Line::through_origin(0.0, 0.0, 1.0)) // Z axis line
+//         .with_line(Line::through_origin(1.0, 1.0, 0.0)) // Diagonal line
+// }
 
-fn create_planes_scene() -> PGAScene {
-    PGAScene::new("Planes Only")
-        .with_plane(Plane::new(1.0, 0.0, 0.0, 1.0)) // X = -1 plane
-        .with_plane(Plane::new(0.0, 1.0, 0.0, 1.0)) // Y = -1 plane
-        .with_plane(Plane::new(0.0, 0.0, 1.0, 1.0)) // Z = -1 plane
-}
+// fn create_planes_scene() -> PGAScene {
+//     PGAScene::new("Planes Only")
+//         .with_plane(Plane::new(1.0, 0.0, 0.0, 1.0)) // X = -1 plane
+//         .with_plane(Plane::new(0.0, 1.0, 0.0, 1.0)) // Y = -1 plane
+//         .with_plane(Plane::new(0.0, 0.0, 1.0, 1.0)) // Z = -1 plane
+// }
 
-fn create_mixed_scene() -> PGAScene {
-    PGAScene::new("Mixed Objects")
-        .with_point(Point::new(0.0, 0.0, 0.0)) // Origin
-        .with_direction(Direction::new(1.0, 0.0, 0.0)) // X direction
-        .with_direction(Direction::new(0.0, 1.0, 0.0)) // Y direction
-        .with_line(Line::through_origin(1.0, 1.0, 0.0)) // Diagonal line
-        .with_plane(Plane::new(1.0, 0.0, 0.0, 1.0)) // X = -1 plane
-}
+// fn create_mixed_scene() -> PGAScene {
+//     PGAScene::new("Mixed Objects")
+//         .with_point(Point::new(0.0, 0.0, 0.0)) // Origin
+//         .with_direction(Direction::new(1.0, 0.0, 0.0)) // X direction
+//         .with_direction(Direction::new(0.0, 1.0, 0.0)) // Y direction
+//         .with_line(Line::through_origin(1.0, 1.0, 0.0)) // Diagonal line
+//         .with_plane(Plane::new(1.0, 0.0, 0.0, 1.0)) // X = -1 plane
+// }
 
 /// Bevy app builder for PGA visualization
 pub struct PGAVisualizationApp;
@@ -199,7 +202,9 @@ impl PGAVisualizationApp {
         .add_systems(Update, input_map)
         .add_systems(Update, handle_scene_reload)
         .add_systems(Update, scene_selection_input)
-        .add_systems(Update, update_scene_ui);
+        .add_systems(Update, update_scene_ui)
+        .add_systems(Update, update_label_positions)
+        .add_systems(Update, update_point_labels);
 
         app
     }
@@ -256,7 +261,7 @@ fn handle_scene_reload(
 fn setup_ui(mut commands: Commands) {
     // Create UI text for scene name in top-left corner
     commands.spawn((
-        Text::new("Demo Scene\nPress 1-5 or ←/→ to change"),
+        Text::new("Demo Scene\nPress arrows to change"),
         Node {
             position_type: PositionType::Absolute,
             left: Val::Px(10.0),
@@ -292,27 +297,8 @@ fn scene_selection_input(
     let mut changed = false;
     let mut new_index = scene_selection.current_index;
 
-    // Use number keys 1-5 to select scene types
-    if keyboard.just_pressed(KeyCode::Digit1) {
-        new_index = 0;
-        changed = true;
-    } else if keyboard.just_pressed(KeyCode::Digit2) {
-        new_index = 1;
-        changed = true;
-    } else if keyboard.just_pressed(KeyCode::Digit3) {
-        new_index = 2;
-        changed = true;
-    } else if keyboard.just_pressed(KeyCode::Digit4) {
-        new_index = 3;
-        changed = true;
-    } else if keyboard.just_pressed(KeyCode::Digit5) {
-        new_index = 4;
-        changed = true;
-    }
     // Use arrow keys to cycle through scenes
-    else if keyboard.just_pressed(KeyCode::ArrowRight)
-        || keyboard.just_pressed(KeyCode::BracketRight)
-    {
+    if keyboard.just_pressed(KeyCode::ArrowRight) || keyboard.just_pressed(KeyCode::BracketRight) {
         new_index = (scene_selection.current_index + 1) % scene_library.len();
         changed = true;
     } else if keyboard.just_pressed(KeyCode::ArrowLeft)
@@ -351,7 +337,7 @@ fn draw_pga_gizmos(mut gizmos: Gizmos<PGAGizmos>, scene: Option<Res<PGAScene>>) 
     gizmos.line(Vec3::ZERO, Vec3::Z * 2.0, LinearRgba::BLUE);
 
     // Draw points as small spheres
-    for point in &scene.points {
+    for (_, point) in &scene.points {
         let pos = pga_point_to_vec3(point);
         gizmos.sphere(pos, 0.01, LinearRgba::new(1.0, 1.0, 0.0, 1.0)); // Yellow
     }
@@ -548,4 +534,54 @@ pub fn input_map(
         scalar *= 1.0 - scroll_amount * mouse_wheel_zoom_sensitivity;
     }
     events.write(ControlEvent::Zoom(scalar));
+}
+
+fn update_point_labels(
+    mut commands: Commands,
+    scene: Option<Res<PGAScene>>,
+    scene_selection: Res<SceneSelection>,
+    // Query existing labels to clean them up when scene changes
+    existing_labels: Query<Entity, With<PointLabel>>,
+) {
+    let Some(scene) = scene else {
+        return;
+    };
+
+    // Clean up existing labels when scene changes
+    if scene_selection.is_changed() || scene.is_changed() {
+        for entity in existing_labels.iter() {
+            commands.entity(entity).despawn();
+        }
+
+        // Create new labels for current scene points
+        for (label_text, point) in scene.points.iter() {
+            commands.spawn((
+                Text::new(label_text),
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(0.0),
+                    top: Val::Px(0.0),
+                    ..default()
+                },
+                PointLabel(pga_point_to_vec3(point)),
+            ));
+        }
+    }
+}
+
+fn update_label_positions(
+    mut camera: Query<(&mut Camera, &GlobalTransform), With<Camera3d>>,
+    mut labels: Query<(&mut Node, &PointLabel)>,
+) {
+    let Ok((camera, camera_global_transform)) = camera.single_mut() else {
+        return;
+    };
+
+    for (mut node, PointLabel(world_position)) in labels.iter_mut() {
+        let viewport_position = camera
+            .world_to_viewport(camera_global_transform, *world_position)
+            .unwrap();
+        node.left = Val::Px(viewport_position.x);
+        node.top = Val::Px(viewport_position.y);
+    }
 }
