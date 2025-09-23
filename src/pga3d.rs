@@ -33,6 +33,10 @@ impl PGA3D {
         }
     }
 
+    pub fn is_zero(&self) -> bool {
+        self.mvec.iter().map(|&x| x.abs()).sum::<float_t>() < 1e-6
+    }
+
     pub const fn new(f: float_t, idx: usize) -> Self {
         let mut ret = Self::zero();
         ret.mvec[idx] = f;
@@ -735,6 +739,11 @@ pub struct Point(pub(crate) PGA3D);
 #[derive(Debug, Clone, PartialEq)]
 pub struct Direction(pub(crate) PGA3D);
 #[derive(Debug, Clone, PartialEq)]
+pub enum PointOrDirection {
+    Point(Point),
+    Direction(Direction),
+}
+#[derive(Debug, Clone, PartialEq)]
 pub struct Line(pub(crate) PGA3D);
 
 #[derive(Debug, Clone, PartialEq)]
@@ -749,7 +758,7 @@ define_binary_op_all!(
     [val ref] => &self +  b;
     [ref ref] => {
         let obj = &self.0 & &b.0;
-        if obj == PGA3D::zero() {
+        if obj.is_zero() {
             None
         } else {
             Some(Line(obj))
@@ -766,11 +775,40 @@ define_binary_op_all!(
     [val ref] => &self &  b;
     [ref ref] => {
         let obj = &self.0 & &b.0;
-        if obj == PGA3D::zero() {
+        if obj.is_zero() {
             None
         } else {
             Some(Line(obj))
         }
+    };
+);
+
+define_binary_op_all!(
+    BitAnd,
+    bitand;
+    self: Line, b: Point, Output = Option<Plane>;
+    [val val] => &self & &b;
+    [ref val] =>  self & &b;
+    [val ref] => &self &  b;
+    [ref ref] => {
+        let obj = &self.0 & &b.0;
+        if obj.is_zero() {
+            None
+        } else {
+            Some(Plane(obj))
+        }
+    };
+);
+
+define_binary_op_all!(
+    BitAnd,
+    bitand;
+    self: Option<Line>, b: Point, Output = Option<Plane>;
+    [val val] => &self & &b;
+    [ref val] =>  self & &b;
+    [val ref] => &self &  b;
+    [ref ref] => {
+        self.as_ref().and_then(|line| line & b)
     };
 );
 
@@ -819,6 +857,102 @@ define_binary_op_all!(
     [val ref] => &self *  b;
     [ref ref] => {
         self.as_ref().map(|line| line * b)
+    };
+);
+
+define_binary_op_all!(
+    BitXor,
+    bitxor;
+    self: Plane, b: Plane, Output = Option<Line>;
+    [val val] => &self ^ &b;
+    [ref val] =>  self ^ &b;
+    [val ref] => &self ^  b;
+    [ref ref] => {
+        let obj = &self.0 ^ &b.0;
+        if obj.is_zero() {
+            None
+        } else {
+            Some(Line(obj))
+        }
+    };
+);
+
+define_binary_op_all!(
+    BitXor,
+    bitxor;
+    self: Line, b: Plane, Output = Option<Point>;
+    [val val] => &self ^ &b;
+    [ref val] =>  self ^ &b;
+    [val ref] => &self ^  b;
+    [ref ref] => {
+        let obj = &self.0 ^ &b.0;
+        if obj.is_zero() {
+            None
+        } else {
+            Some(Point(obj))
+        }
+    };
+);
+
+define_binary_op_all!(
+    BitXor,
+    bitxor;
+    self: Plane, b: Line, Output = Option<PointOrDirection>;
+    [val val] => &self ^ &b;
+    [ref val] =>  self ^ &b;
+    [val ref] => &self ^  b;
+    [ref ref] => {
+        let obj = &self.0 ^ &b.0;
+        if obj.is_zero() {
+            return None;
+        }
+        else if obj[14].abs() < 1e-6 {
+            // Coplanar line and point meet at point at infinity, which is a direction
+            Some(PointOrDirection::Direction(Direction(obj)))
+        } else {
+            Some(PointOrDirection::Point(Point(obj)))
+        }
+    };
+);
+
+define_binary_op_all!(
+    BitXor,
+    bitxor;
+    self: Option<Line>, b: Plane, Output = Option<Point>;
+    [val val] => &self ^ &b;
+    [ref val] =>  self ^ &b;
+    [val ref] => &self ^  b;
+    [ref ref] => {
+        self.as_ref().and_then(|line| line ^ b)
+    };
+);
+
+define_binary_op_all!(
+    BitOr,
+    bitor;
+    self: Plane, b: Line, Output = Option<Plane>;
+    [val val] => &self | &b;
+    [ref val] =>  self | &b;
+    [val ref] => &self |  b;
+    [ref ref] => {
+        let obj = &self.0 | &b.0;
+        if obj == PGA3D::zero() {
+            None
+        } else {
+            Some(Plane(obj))
+        }
+    };
+);
+
+define_binary_op_all!(
+    BitOr,
+    bitor;
+    self: Line, b: Point, Output = Plane;
+    [val val] => &self | &b;
+    [ref val] =>  self | &b;
+    [val ref] => &self |  b;
+    [ref ref] => {
+        Plane(&self.0 | &b.0)
     };
 );
 
