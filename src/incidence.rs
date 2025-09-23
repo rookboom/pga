@@ -1,19 +1,7 @@
 // Join
-use crate::pga3d::PGA3D;
-use crate::{Line, Plane, Point};
+use crate::pga3d::{Line, PGA3D, Plane, Point};
 use std::ops::{BitAnd, BitXor};
-impl BitAnd for Point {
-    type Output = Option<Line>;
 
-    fn bitand(self, b: Point) -> Option<Line> {
-        let obj = self.0 & b.0;
-        if obj == PGA3D::zero() {
-            None
-        } else {
-            Some(Line(obj))
-        }
-    }
-}
 // Join
 impl BitAnd<Point> for Option<Line> {
     type Output = Option<Plane>;
@@ -81,6 +69,21 @@ impl BitXor<Line> for Plane {
     }
 }
 
+// Wedge
+// The outer product. (MEET)
+impl BitXor<Line> for Line {
+    type Output = Option<Point>;
+
+    fn bitxor(self, b: Line) -> Option<Point> {
+        let obj = self.0 ^ b.0;
+        if obj == PGA3D::zero() {
+            None
+        } else {
+            Some(Point(obj))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{ApproxEq, assert_approx_eq};
@@ -97,7 +100,7 @@ mod tests {
 
     #[test]
     fn identical_points_do_not_join_in_a_line() {
-        let p1 = Point::new(1.0, 0.0, 0.0);
+        let p1 = &Point::new(1.0, 0.0, 0.0);
         let degenerate_line1: Option<Line> = p1 & p1;
         assert!(degenerate_line1.is_none());
     }
@@ -166,4 +169,17 @@ mod tests {
         let plane = line & p2;
         assert!(plane.is_none());
     }
+
+    // #[test]
+    // fn coplanar_lines_meet_in_a_point() {
+    //     let p0 = Point::new(0.0, 0.0, 0.0);
+    //     let p1 = Point::new(1.0, 0.0, 0.0);
+    //     let p2 = Point::new(0.0, 1.0, 0.0);
+    //     let line1: Line = (p0 & p1).unwrap();
+    //     let projected_line: Line = (Plane::E3 | line1).unwrap() * Plane::E3;
+    //     assert!(projected_line.0 != PGA3D::zero());
+    //     let line2: Line = (p0 & p2).unwrap();
+    //     let plane = line1 ^ line2;
+    //     assert!(plane.is_some());
+    // }
 }

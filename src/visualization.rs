@@ -129,7 +129,7 @@ impl PGAScene {
 fn create_two_points_join_in_a_line() -> PGAScene {
     let p0 = Point::new(0.0, 0.0, 0.0);
     let p1 = Point::new(1.0, 0.0, 0.0);
-    let line1: Option<Line> = p0 & p1;
+    let line1: Option<Line> = &p0 & &p1;
     assert!(line1.is_some());
 
     PGAScene::new("Two Points Join in a Line")
@@ -352,35 +352,35 @@ fn draw_pga_gizmos(mut gizmos: Gizmos<PGAGizmos>, scene: Option<Res<PGAScene>>) 
 
     // Draw points as small spheres
     for point in &scene.points {
-        let pos = pga_point_to_vec3(*point);
+        let pos = pga_point_to_vec3(point);
         gizmos.sphere(pos, 0.01, LinearRgba::new(1.0, 1.0, 0.0, 1.0)); // Yellow
     }
 
     // Draw directions as arrows from origin
     for direction in &scene.directions {
-        let dir = pga_direction_to_vec3(*direction);
+        let dir = pga_direction_to_vec3(direction);
         gizmos.arrow(Vec3::ZERO, dir * 2.0, LinearRgba::new(0.0, 1.0, 1.0, 1.0));
         // Cyan
     }
 
     // Draw lines
     for line in &scene.lines {
-        draw_pga_line(&mut gizmos, *line, LinearRgba::new(1.0, 0.5, 0.0, 1.0)); // Orange
+        draw_pga_line(&mut gizmos, line, LinearRgba::new(1.0, 0.5, 0.0, 1.0)); // Orange
     }
 
     // Draw planes as grids
     for plane in &scene.planes {
-        draw_pga_plane(&mut gizmos, *plane, LinearRgba::new(0.5, 0.0, 0.5, 1.0));
+        draw_pga_plane(&mut gizmos, plane, LinearRgba::new(0.5, 0.0, 0.5, 1.0));
         // Purple
     }
 }
 
 /// Convert a PGA Point to a Bevy Vec3
-fn pga_point_to_vec3(point: Point) -> Vec3 {
+fn pga_point_to_vec3(point: &Point) -> Vec3 {
     // Extract coordinates from the PGA point
     // In PGA, a point is represented as x*e032 + y*e013 + z*e021 + e123
     // We need to extract x, y, z coordinates
-    let pga = point.0;
+    let pga = &point.0;
 
     // Check if the point is at infinity (e123 component is zero)
     if pga.mvec[14].abs() < f32::EPSILON {
@@ -397,8 +397,8 @@ fn pga_point_to_vec3(point: Point) -> Vec3 {
 }
 
 /// Convert a PGA Direction to a Bevy Vec3
-fn pga_direction_to_vec3(direction: Direction) -> Vec3 {
-    let pga = direction.0;
+fn pga_direction_to_vec3(direction: &Direction) -> Vec3 {
+    let pga = &direction.0;
 
     // Direction vectors are represented as x*e032 + y*e013 + z*e021
     let x = pga.mvec[13]; // e032 component
@@ -409,8 +409,8 @@ fn pga_direction_to_vec3(direction: Direction) -> Vec3 {
 }
 
 /// Draw a PGA line using gizmos
-fn draw_pga_line(gizmos: &mut Gizmos<PGAGizmos>, line: Line, color: LinearRgba) {
-    let pga = line.0;
+fn draw_pga_line(gizmos: &mut Gizmos<PGAGizmos>, line: &Line, color: LinearRgba) {
+    let pga = &line.0;
 
     // Extract direction and moment components
     let dir_x = pga.mvec[10]; // e31
@@ -453,8 +453,8 @@ fn draw_pga_line(gizmos: &mut Gizmos<PGAGizmos>, line: Line, color: LinearRgba) 
 }
 
 /// Draw a PGA plane using gizmos
-fn draw_pga_plane(gizmos: &mut Gizmos<PGAGizmos>, plane: Plane, color: LinearRgba) {
-    let pga = plane.0;
+fn draw_pga_plane(gizmos: &mut Gizmos<PGAGizmos>, plane: &Plane, color: LinearRgba) {
+    let pga = &plane.0;
 
     // Extract plane equation coefficients: ax + by + cz + d = 0
     let a = pga.mvec[2]; // e1
