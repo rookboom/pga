@@ -399,8 +399,8 @@ fn pga_point_to_vec3(point: &Point) -> Vec3 {
     // Extract coordinates by dividing by the e123 component
     let w = pga.mvec[14]; // e123 component
     let x = pga.mvec[13] / w; // e032 component
-    let y = pga.mvec[11] / w; // e021 component
-    let z = pga.mvec[12] / w; // e013 component
+    let y = pga.mvec[12] / w; // e013 component  
+    let z = pga.mvec[11] / w; // e021 component
 
     Vec3::new(x, y, z)
 }
@@ -411,8 +411,8 @@ fn pga_direction_to_vec3(direction: &Direction) -> Vec3 {
 
     // Direction vectors are represented as x*e032 + y*e013 + z*e021
     let x = pga.mvec[13]; // e032 component
-    let y = pga.mvec[11]; // e021 component
-    let z = pga.mvec[12]; // e013 component
+    let y = pga.mvec[12]; // e013 component
+    let z = pga.mvec[11]; // e021 component
 
     Vec3::new(x, y, z)
 }
