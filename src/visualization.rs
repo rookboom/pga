@@ -22,44 +22,57 @@ use crate::{Direction, Line, Plane, Point};
 #[derive(Default, Reflect, GizmoConfigGroup)]
 pub struct PGAGizmos;
 
-/// Available scene types
-/// Resource containing all available scenes
+type PGASceneBuilder = Box<fn(points: &[Point]) -> PGAScene>;
 #[derive(Resource)]
 pub struct SceneLibrary {
     pub scenes: Vec<PGAScene>,
+    current_scene_index: usize,
 }
+
+#[derive(Resource)]
+pub struct SceneBuilders {
+    pub scene_builders: Vec<PGASceneBuilder>,
+}
+
+#[derive(Event)]
+pub struct SceneChangedEvent;
+
+#[derive(Event)]
+pub struct PointsChangedEvent;
 
 impl SceneLibrary {
     pub fn new() -> Self {
+        let scenes = build_scenes();
         Self {
-            scenes: vec![
-                create_two_points_join_in_a_line(),
-                // create_points_scene(),
-                // create_lines_scene(),
-                // create_planes_scene(),
-                // create_mixed_scene(),
-            ],
+            scenes,
+            current_scene_index: 0,
         }
     }
 
-    pub fn get(&self, index: usize) -> Option<&PGAScene> {
-        self.scenes.get(index)
+    pub fn current(&self) -> &PGAScene {
+        &self.scenes[self.current_scene_index]
+    }
+
+    pub fn current_mut(&mut self) -> &mut PGAScene {
+        &mut self.scenes[self.current_scene_index]
+    }
+
+    pub fn next_scene(&mut self) -> &PGAScene {
+        self.current_scene_index = (self.current_scene_index + 1) % self.scenes.len();
+        self.current()
+    }
+
+    pub fn prev_scene(&mut self) -> &PGAScene {
+        if self.current_scene_index == 0 {
+            self.current_scene_index = self.scenes.len() - 1;
+        } else {
+            self.current_scene_index -= 1;
+        }
+        self.current()
     }
 
     pub fn len(&self) -> usize {
         self.scenes.len()
-    }
-}
-
-/// Resource for tracking current scene selection
-#[derive(Resource)]
-pub struct SceneSelection {
-    pub current_index: usize,
-}
-
-impl Default for SceneSelection {
-    fn default() -> Self {
-        Self { current_index: 0 }
     }
 }
 
@@ -71,129 +84,104 @@ struct SceneNameText;
 struct PointLabel(usize);
 
 /// Resource containing PGA objects to visualize
-#[derive(Resource, Clone)]
+#[derive(Clone)]
 pub struct PGAScene {
-    pub name: String,
-    pub points: Vec<(String, Point)>,
+    pub name: &'static str,
+    pub points: Vec<Point>,
     pub planes: Vec<Plane>,
     pub lines: Vec<Line>,
     pub directions: Vec<Direction>,
-    pub builder: fn(scene: PGAScene) -> PGAScene,
 }
 
 impl Default for PGAScene {
     fn default() -> Self {
         Self {
-            name: "Unnamed Scene".to_string(),
+            name: Self::EMPTY_SCENE,
             points: Vec::new(),
             planes: Vec::new(),
             lines: Vec::new(),
             directions: Vec::new(),
-            builder: |_| PGAScene::default(),
         }
     }
-}
-
-pub fn demo() -> PGAScene {
-    create_two_points_join_in_a_line()
 }
 
 impl PGAScene {
-    pub fn new(name: impl Into<String>, builder: fn(PGAScene) -> PGAScene) -> Self {
-        Self {
-            name: name.into(),
-            points: Vec::new(),
+    const EMPTY_SCENE: &str = "Empty Scene";
+    const TWO_POINTS_JOIN_IN_A_LINE: &str = "Two points join in a line (P0 V P1)";
+    const THREE_POINTS_JOIN_IN_A_PLANE: &str = "Three points join in a plane (P0 V P1 V P2)";
+    const LINE_AND_POINT_JOIN_IN_A_PLANE: &str =
+        "A line and a point join in a plane ((P0 V P1) V P2)";
+
+    pub fn new(name: &'static str, points: &[&Point]) -> Self {
+        let mut scene = Self {
+            name,
+            points: points.iter().map(|&p| p.clone()).collect(),
             planes: Vec::new(),
             lines: Vec::new(),
             directions: Vec::new(),
-            builder,
+        };
+
+        scene.rebuild();
+        scene
+    }
+
+    pub fn with_plane(&mut self, plane: Option<Plane>) {
+        if let Some(plane) = plane {
+            self.planes.push(plane);
         }
     }
 
-    pub fn with_point(mut self, name: &str, point: Point) -> Self {
-        self.points.push((name.to_string(), point));
-        self
+    pub fn with_line(&mut self, line: Option<Line>) {
+        if let Some(line) = line {
+            self.lines.push(line);
+        }
     }
 
-    pub fn with_plane(mut self, plane: Plane) -> Self {
-        self.planes.push(plane);
-        self
+    pub fn with_direction(mut self, direction: Option<Direction>) {
+        if let Some(direction) = direction {
+            self.directions.push(direction);
+        }
     }
 
-    pub fn with_line(mut self, line: Line) -> Self {
-        self.lines.push(line);
-        self
+    pub fn point(&self, index: usize) -> &Point {
+        &self.points[index]
     }
 
-    pub fn with_direction(mut self, direction: Direction) -> Self {
-        self.directions.push(direction);
-        self
-    }
-
-    pub fn reset_non_points(&mut self) {
-        self.planes.clear();
+    pub fn rebuild(&mut self) {
         self.lines.clear();
+        self.planes.clear();
         self.directions.clear();
+        let p = self.points.clone();
+        match self.name {
+            Self::TWO_POINTS_JOIN_IN_A_LINE => {
+                self.with_line(&p[0] & &p[1]);
+            }
+            Self::THREE_POINTS_JOIN_IN_A_PLANE => {
+                self.with_plane(&p[0] & &p[1] & &p[2]);
+            }
+            Self::LINE_AND_POINT_JOIN_IN_A_PLANE => {
+                self.with_line(&p[0] & &p[1]);
+                self.with_plane(&p[0] & &p[1] & &p[2]);
+            }
+            _ => {}
+        }
     }
 }
 
-/// Create different demo scenes
+fn build_scenes() -> Vec<PGAScene> {
+    let p0 = &Point::new(1.0, 0.0, 0.0);
+    let p1 = &Point::new(0.0, 1.0, 0.0);
+    let p2 = &Point::new(0.0, 0.0, 1.0);
 
-fn create_two_points_join_in_a_line() -> PGAScene {
-    let p0 = Point::new(0.0, 0.0, 0.0);
-    let p1 = Point::new(1.0, 0.0, 0.0);
-    let line1: Option<Line> = &p0 & &p1;
-    assert!(line1.is_some());
+    let scenes = vec![
+        PGAScene::default(),
+        PGAScene::new(PGAScene::TWO_POINTS_JOIN_IN_A_LINE, &[p0, p1]),
+        PGAScene::new(PGAScene::THREE_POINTS_JOIN_IN_A_PLANE, &[p0, p1, p2]),
+        PGAScene::new(PGAScene::LINE_AND_POINT_JOIN_IN_A_PLANE, &[p0, p1, p2]),
+    ];
 
-    PGAScene::new("Two points join in a line (P0 V P1)", |scene| {
-        match scene.points.as_slice() {
-            [(_, p0), (_, p1)] => {
-                if let Some(line) = p0 & p1 {
-                    scene.with_line(line)
-                } else {
-                    scene
-                }
-            }
-            _ => scene,
-        }
-    })
-    .with_point("P0", p0)
-    .with_point("P1", p1)
+    scenes
 }
-
-// fn create_points_scene() -> PGAScene {
-//     PGAScene::new("Points Only")
-//         .with_point(Point::new(0.0, 0.0, 0.0)) // Origin
-//         .with_point(Point::new(1.0, 0.0, 0.0)) // X axis
-//         .with_point(Point::new(0.0, 1.0, 0.0)) // Y axis
-//         .with_point(Point::new(0.0, 0.0, 1.0)) // Z axis
-//         .with_point(Point::new(1.0, 1.0, 1.0)) // Corner
-//         .with_point(Point::new(-1.0, -1.0, -1.0)) // Opposite corner
-// }
-
-// fn create_lines_scene() -> PGAScene {
-//     PGAScene::new("Lines Only")
-//         .with_line(Line::through_origin(1.0, 0.0, 0.0)) // X axis line
-//         .with_line(Line::through_origin(0.0, 1.0, 0.0)) // Y axis line
-//         .with_line(Line::through_origin(0.0, 0.0, 1.0)) // Z axis line
-//         .with_line(Line::through_origin(1.0, 1.0, 0.0)) // Diagonal line
-// }
-
-// fn create_planes_scene() -> PGAScene {
-//     PGAScene::new("Planes Only")
-//         .with_plane(Plane::new(1.0, 0.0, 0.0, 1.0)) // X = -1 plane
-//         .with_plane(Plane::new(0.0, 1.0, 0.0, 1.0)) // Y = -1 plane
-//         .with_plane(Plane::new(0.0, 0.0, 1.0, 1.0)) // Z = -1 plane
-// }
-
-// fn create_mixed_scene() -> PGAScene {
-//     PGAScene::new("Mixed Objects")
-//         .with_point(Point::new(0.0, 0.0, 0.0)) // Origin
-//         .with_direction(Direction::new(1.0, 0.0, 0.0)) // X direction
-//         .with_direction(Direction::new(0.0, 1.0, 0.0)) // Y direction
-//         .with_line(Line::through_origin(1.0, 1.0, 0.0)) // Diagonal line
-//         .with_plane(Plane::new(1.0, 0.0, 0.0, 1.0)) // X = -1 plane
-// }
 
 /// Bevy app builder for PGA visualization
 pub struct PGAVisualizationApp;
@@ -215,13 +203,13 @@ impl PGAVisualizationApp {
             override_input_system: true,
         })
         .add_plugins(EguiPlugin::default())
+        .add_event::<SceneChangedEvent>()
+        .add_event::<PointsChangedEvent>()
         .init_gizmo_group::<PGAGizmos>()
-        .init_resource::<SceneSelection>()
         .insert_resource(SceneLibrary::new())
         .add_systems(Startup, (setup_scene, setup_ui))
         .add_systems(Update, draw_pga_gizmos)
         .add_systems(Update, input_map)
-        .add_systems(Update, handle_scene_reload)
         .add_systems(Update, scene_selection_input)
         .add_systems(Update, update_scene_ui)
         .add_systems(Update, update_point_labels)
@@ -248,21 +236,19 @@ fn setup_scene(mut commands: Commands) {
             Vec3::Y,
         ));
 
-    commands.insert_resource(demo());
-}
-
-/// System to handle scene reloading when Enter is pressed
-fn handle_scene_reload(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut scene: ResMut<PGAScene>,
-    scene_selection: Res<SceneSelection>,
-    scene_library: Res<SceneLibrary>,
-) {
-    if keyboard.just_pressed(KeyCode::Enter) {
-        // Clear the existing scene and replace with current selection
-        if let Some(selected_scene) = scene_library.get(scene_selection.current_index) {
-            *scene = selected_scene.clone();
-        }
+    for i in 0..10 {
+        commands.spawn((
+            Text::new(format!("P{}", i)),
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(0.0),
+                top: Val::Px(0.0),
+                ..default()
+            },
+            ZIndex(1000), // Ensure labels appear on top
+            PointLabel(i),
+            Visibility::Hidden,
+        ));
     }
 }
 
@@ -270,7 +256,7 @@ fn handle_scene_reload(
 fn setup_ui(mut commands: Commands) {
     // Create UI text for scene name in top-left corner
     commands.spawn((
-        Text::new("Demo Scene\nPress arrows to change"),
+        Text::new("Press arrows to change scene."),
         Node {
             position_type: PositionType::Absolute,
             left: Val::Px(10.0),
@@ -283,57 +269,40 @@ fn setup_ui(mut commands: Commands) {
 
 /// Update the scene name text when scene changes
 fn update_scene_ui(
-    scene_selection: Res<SceneSelection>,
-    scene_library: Res<SceneLibrary>,
+    mut scenes: ResMut<SceneLibrary>,
+    mut on_scene_changed: EventReader<SceneChangedEvent>,
     mut query: Query<&mut Text, With<SceneNameText>>,
 ) {
-    if scene_selection.is_changed() {
-        for mut text in query.iter_mut() {
-            if let Some(current_scene) = scene_library.get(scene_selection.current_index) {
-                **text = current_scene.name.clone();
-            }
-        }
+    if on_scene_changed.read().next().is_none() {
+        return; // No scene change, no need to update UI
+    }
+
+    for mut text in query.iter_mut() {
+        let current_scene = scenes.current_mut();
+        **text = current_scene.name.to_string();
     }
 }
 
-/// System for keyboard scene selection shortcuts
+/// System for keyboard scene selection
 fn scene_selection_input(
     keyboard: Res<ButtonInput<KeyCode>>,
-    mut scene_selection: ResMut<SceneSelection>,
-    mut scene: ResMut<PGAScene>,
-    scene_library: Res<SceneLibrary>,
+    mut scene_library: ResMut<SceneLibrary>,
+    mut notify_scene_changed: EventWriter<SceneChangedEvent>,
 ) {
-    let mut changed = false;
-    let mut new_index = scene_selection.current_index;
-
-    // Use arrow keys to cycle through scenes
     if keyboard.just_pressed(KeyCode::ArrowRight) || keyboard.just_pressed(KeyCode::BracketRight) {
-        new_index = (scene_selection.current_index + 1) % scene_library.len();
-        changed = true;
+        scene_library.next_scene();
+        notify_scene_changed.write(SceneChangedEvent);
     } else if keyboard.just_pressed(KeyCode::ArrowLeft)
         || keyboard.just_pressed(KeyCode::BracketLeft)
     {
-        new_index = if scene_selection.current_index == 0 {
-            scene_library.len() - 1
-        } else {
-            scene_selection.current_index - 1
-        };
-        changed = true;
-    }
-
-    if changed && new_index < scene_library.len() {
-        scene_selection.current_index = new_index;
-        if let Some(selected_scene) = scene_library.get(new_index) {
-            *scene = selected_scene.clone();
-        }
+        scene_library.prev_scene();
+        notify_scene_changed.write(SceneChangedEvent);
     }
 }
 
 /// System to draw PGA objects using Bevy's gizmo API
-fn draw_pga_gizmos(mut gizmos: Gizmos<PGAGizmos>, scene: Option<Res<PGAScene>>) {
-    let Some(scene) = scene else {
-        return;
-    };
+fn draw_pga_gizmos(mut gizmos: Gizmos<PGAGizmos>, scenes: Res<SceneLibrary>) {
+    let scene = scenes.current();
 
     // Draw coordinate axes
     gizmos.line(Vec3::ZERO, Vec3::X * 2.0, LinearRgba::RED);
@@ -341,7 +310,7 @@ fn draw_pga_gizmos(mut gizmos: Gizmos<PGAGizmos>, scene: Option<Res<PGAScene>>) 
     gizmos.line(Vec3::ZERO, Vec3::Z * 2.0, LinearRgba::BLUE);
 
     // Draw points as small spheres
-    for (_, point) in &scene.points {
+    for point in &scene.points {
         let pos = pga_point_to_vec3(point);
         gizmos.sphere(pos, 0.01, LinearRgba::new(1.0, 1.0, 0.0, 1.0)); // Yellow
     }
@@ -552,35 +521,24 @@ pub fn input_map(
 }
 
 fn update_point_labels(
-    mut commands: Commands,
-    scene: Option<Res<PGAScene>>,
-    scene_selection: Res<SceneSelection>,
+    scenes: Res<SceneLibrary>,
     // Query existing labels to clean them up when scene changes
-    existing_labels: Query<Entity, With<PointLabel>>,
+    mut existing_labels: Query<&mut Visibility, With<PointLabel>>,
+    mut on_scene_changed: EventReader<SceneChangedEvent>,
 ) {
-    let Some(scene) = scene else {
-        return;
-    };
+    if on_scene_changed.read().next().is_none() {
+        return; // No scene change, no need to update labels
+    }
 
-    // Clean up existing labels when scene changes
-    if scene_selection.is_changed() || scene.is_changed() {
-        for entity in existing_labels.iter() {
-            commands.entity(entity).despawn();
-        }
+    let scene = scenes.current();
+    let num_points = scene.points.len();
 
-        // Create new labels for current scene points
-        for (index, (label_text, _)) in scene.points.iter().enumerate() {
-            commands.spawn((
-                Text::new(label_text),
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: Val::Px(0.0),
-                    top: Val::Px(0.0),
-                    ..default()
-                },
-                ZIndex(1000), // Ensure labels appear on top
-                PointLabel(index),
-            ));
+    // Create new labels for current scene points
+    for (index, mut visibility) in existing_labels.iter_mut().enumerate() {
+        if index >= num_points {
+            *visibility = Visibility::Hidden;
+        } else {
+            *visibility = Visibility::Visible;
         }
     }
 }
@@ -588,9 +546,15 @@ fn update_point_labels(
 fn update_label_positions(
     camera_query: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
     mut labels: Query<(&mut Node, &PointLabel)>,
-    scene: Res<PGAScene>,
+    scenes: Res<SceneLibrary>,
     windows: Query<&Window>,
+    mut on_scene_changed: EventReader<SceneChangedEvent>,
+    mut on_points_changed: EventReader<PointsChangedEvent>,
 ) {
+    if on_points_changed.read().next().is_none() && on_scene_changed.read().next().is_none() {
+        return; // No points change, no need to update labels
+    }
+    let scene = scenes.current();
     let Ok((camera, camera_global_transform)) = camera_query.single() else {
         return;
     };
@@ -600,7 +564,9 @@ fn update_label_positions(
     };
 
     for (mut node, PointLabel(index)) in labels.iter_mut() {
-        let Some(point) = scene.points.get(*index).map(|(_, p)| p) else {
+        info!("Updating label positions for point {index}...");
+
+        let Some(point) = scene.points.get(*index).map(|p| p) else {
             continue;
         };
 
@@ -614,6 +580,7 @@ fn update_label_positions(
             let clamped_x = viewport_position.x.clamp(0.0, window.width() - 100.0);
             let clamped_y = viewport_position.y.clamp(0.0, window.height() - 30.0);
 
+            info!("Point {} viewport position: {:?}", index, viewport_position);
             node.left = Val::Px(clamped_x);
             node.top = Val::Px(clamped_y);
 
@@ -627,9 +594,14 @@ fn update_label_positions(
 }
 
 /// System to display coordinate editor UI for points
-fn coordinate_editor_ui(mut contexts: EguiContexts, mut scene: ResMut<PGAScene>) {
+fn coordinate_editor_ui(
+    mut contexts: EguiContexts,
+    mut scenes: ResMut<SceneLibrary>,
+    mut notify_points_changed: EventWriter<PointsChangedEvent>,
+) {
     // Get the primary window context
     if let Ok(ctx) = contexts.ctx_mut() {
+        let scene = scenes.current_mut();
         egui::Window::new("Point Coordinates")
             .default_open(true)
             .resizable(true)
@@ -640,10 +612,10 @@ fn coordinate_editor_ui(mut contexts: EguiContexts, mut scene: ResMut<PGAScene>)
                 let mut points_changed = false;
 
                 // Create a list of points with editable coordinates
-                for (_index, (name, point)) in scene.points.iter_mut().enumerate() {
+                for (index, point) in scene.points.iter_mut().enumerate() {
                     ui.group(|ui| {
                         ui.horizontal(|ui| {
-                            ui.label(format!("{}:", name));
+                            ui.label(format!("P{}:", index));
                         });
 
                         ui.horizontal(|ui| {
@@ -687,8 +659,9 @@ fn coordinate_editor_ui(mut contexts: EguiContexts, mut scene: ResMut<PGAScene>)
                 }
 
                 if points_changed {
-                    scene.reset_non_points();
-                    *scene = (scene.builder)(scene.clone());
+                    scene.rebuild();
+                    info!("Points changed, scene rebuilt.");
+                    notify_points_changed.write(PointsChangedEvent);
                 }
             });
     }
