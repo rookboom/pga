@@ -1,7 +1,6 @@
 #![allow(dead_code)]
-mod incidence;
 mod pga3d;
-mod project_reject;
+mod test;
 
 #[cfg(feature = "visualization")]
 pub mod visualization;
@@ -17,23 +16,143 @@ use std::ops::Neg;
 
 use pga3d::PGA3D;
 
-use crate::pga3d::I;
+use crate::pga3d::{Direction, Line, Plane, Point};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Point(PGA3D);
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Direction(PGA3D);
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Line(PGA3D);
+/// Trait for approximate equality comparisons, useful for floating-point tests
+pub trait ApproxEq {
+    /// Check if two values are approximately equal within a default epsilon
+    fn approx_eq(&self, other: &Self) -> bool;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Plane(PGA3D);
+    /// Check if two values are approximately equal within a specified epsilon
+    fn approx_eq_eps(&self, other: &Self, epsilon: f32) -> bool;
+}
+
+impl ApproxEq for f32 {
+    fn approx_eq(&self, other: &Self) -> bool {
+        self.approx_eq_eps(other, 1e-6)
+    }
+
+    fn approx_eq_eps(&self, other: &Self, epsilon: f32) -> bool {
+        (self - other).abs() < epsilon
+    }
+}
+
+impl ApproxEq for PGA3D {
+    fn approx_eq(&self, other: &Self) -> bool {
+        self.approx_eq_eps(other, 1e-6)
+    }
+
+    fn approx_eq_eps(&self, other: &Self, epsilon: f32) -> bool {
+        self.mvec
+            .iter()
+            .zip(other.mvec.iter())
+            .all(|(a, b)| a.approx_eq_eps(b, epsilon))
+    }
+}
+
+impl ApproxEq for Point {
+    fn approx_eq(&self, other: &Self) -> bool {
+        self.0.approx_eq(&other.0)
+    }
+
+    fn approx_eq_eps(&self, other: &Self, epsilon: f32) -> bool {
+        self.0.approx_eq_eps(&other.0, epsilon)
+    }
+}
+
+impl ApproxEq for Line {
+    fn approx_eq(&self, other: &Self) -> bool {
+        self.0.approx_eq(&other.0)
+    }
+
+    fn approx_eq_eps(&self, other: &Self, epsilon: f32) -> bool {
+        self.0.approx_eq_eps(&other.0, epsilon)
+    }
+}
+
+impl ApproxEq for Plane {
+    fn approx_eq(&self, other: &Self) -> bool {
+        self.0.approx_eq(&other.0)
+    }
+
+    fn approx_eq_eps(&self, other: &Self, epsilon: f32) -> bool {
+        self.0.approx_eq_eps(&other.0, epsilon)
+    }
+}
+
+impl ApproxEq for Direction {
+    fn approx_eq(&self, other: &Self) -> bool {
+        self.0.approx_eq(&other.0)
+    }
+
+    fn approx_eq_eps(&self, other: &Self, epsilon: f32) -> bool {
+        self.0.approx_eq_eps(&other.0, epsilon)
+    }
+}
+
+/// Macro for asserting approximate equality in tests
+#[macro_export]
+macro_rules! assert_approx_eq {
+    ($left:expr, $right:expr) => {
+        match (&$left, &$right) {
+            (left_val, right_val) => {
+                if !left_val.approx_eq(right_val) {
+                    panic!(
+                        "assertion failed: `(left approx== right)`\n  left: `{:?}`\n right: `{:?}`",
+                        left_val, right_val
+                    );
+                }
+            }
+        }
+    };
+    ($left:expr, $right:expr, $epsilon:expr) => {
+        match (&$left, &$right, &$epsilon) {
+            (left_val, right_val, epsilon_val) => {
+                if !left_val.approx_eq_eps(right_val, *epsilon_val) {
+                    panic!(
+                        "assertion failed: `(left approx== right)` with epsilon `{}`\n  left: `{:?}`\n right: `{:?}`",
+                        epsilon_val, left_val, right_val
+                    );
+                }
+            }
+        }
+    };
+}
+
+/// Macro for asserting approximate inequality in tests
+#[macro_export]
+macro_rules! assert_approx_ne {
+    ($left:expr, $right:expr) => {
+        match (&$left, &$right) {
+            (left_val, right_val) => {
+                if left_val.approx_eq(right_val) {
+                    panic!(
+                        "assertion failed: `(left approx!= right)`\n  left: `{:?}`\n right: `{:?}`",
+                        left_val, right_val
+                    );
+                }
+            }
+        }
+    };
+    ($left:expr, $right:expr, $epsilon:expr) => {
+        match (&$left, &$right, &$epsilon) {
+            (left_val, right_val, epsilon_val) => {
+                if left_val.approx_eq_eps(right_val, *epsilon_val) {
+                    panic!(
+                        "assertion failed: `(left approx!= right)` with epsilon `{}`\n  left: `{:?}`\n right: `{:?}`",
+                        epsilon_val, left_val, right_val
+                    );
+                }
+            }
+        }
+    };
+}
 
 impl Point {
-    const ORIGIN: Point = Point(pga3d::e123);
-    const X1: Point = Point(pga3d::e123.with(13, 1.0));
-    const Y1: Point = Point(pga3d::e123.with(12, 1.0));
-    const Z1: Point = Point(pga3d::e123.with(11, 1.0));
+    const ORIGIN: Point = Point(PGA3D::e123());
+    const X1: Point = Point(PGA3D::e123().with(13, 1.0));
+    const Y1: Point = Point(PGA3D::e123().with(12, 1.0));
+    const Z1: Point = Point(PGA3D::e123().with(11, 1.0));
 
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         Point(PGA3D::point(x, y, z))
@@ -52,14 +171,14 @@ impl Plane {
     }
 
     pub fn perpendicular_direction(&self) -> Direction {
-        Direction(self.0 | I)
+        Direction(&self.0 | PGA3D::e0123())
     }
 }
 
 impl Line {
-    const Z_AXIS: Line = Line(pga3d::e12);
-    const X_AXIS: Line = Line(pga3d::e23);
-    const Y_AXIS: Line = Line(pga3d::e31);
+    const Z_AXIS: Line = Line(PGA3D::e12());
+    const X_AXIS: Line = Line(PGA3D::e23());
+    const Y_AXIS: Line = Line(PGA3D::e31());
 
     pub fn new(
         dir_x: f32,
@@ -116,15 +235,15 @@ impl Line {
     }
 
     pub fn perpendicular_line(&self) -> Line {
-        Line(self.0 | I)
+        Line(&self.0 | PGA3D::e0123())
     }
 }
 
 /// Right-handed y-up coordinate system
 impl Direction {
-    const UP: Direction = Direction(pga3d::e013);
-    const LEFT: Direction = Direction(pga3d::e032);
-    const FORWARD: Direction = Direction(pga3d::e021);
+    const UP: Direction = Direction(PGA3D::e013());
+    const LEFT: Direction = Direction(PGA3D::e032());
+    const FORWARD: Direction = Direction(PGA3D::e021());
 
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         Direction(PGA3D::direction(x, y, z))

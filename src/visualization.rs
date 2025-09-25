@@ -1,10 +1,187 @@
-use bevy::{gizmos::config::GizmoConfigGroup, prelude::*};
+//! PGA Visualization module
+//!
+//! This module provides 3D visualization capabilities for Projective Geometric Algebra objects
+//! using the Bevy game engine.
+
+use bevy::{
+    gizmos::config::GizmoConfigGroup,
+    input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel},
+    prelude::*,
+};
+use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui};
+use smooth_bevy_cameras::{
+    LookTransformPlugin,
+    controllers::orbit::{
+        ControlEvent, OrbitCameraBundle, OrbitCameraController, OrbitCameraPlugin,
+    },
+};
 
 use crate::{Direction, Line, Plane, Point};
 
 /// Configuration for the PGA visualization
 #[derive(Default, Reflect, GizmoConfigGroup)]
 pub struct PGAGizmos;
+
+type PGASceneBuilder = Box<fn(points: &[Point]) -> PGAScene>;
+#[derive(Resource)]
+pub struct SceneLibrary {
+    pub scenes: Vec<PGAScene>,
+    current_scene_index: usize,
+}
+
+#[derive(Resource)]
+pub struct SceneBuilders {
+    pub scene_builders: Vec<PGASceneBuilder>,
+}
+
+#[derive(Event)]
+pub struct SceneChangedEvent;
+
+#[derive(Event)]
+pub struct PointsChangedEvent;
+
+impl SceneLibrary {
+    pub fn new() -> Self {
+        let scenes = build_scenes();
+        Self {
+            scenes,
+            current_scene_index: 0,
+        }
+    }
+
+    pub fn current(&self) -> &PGAScene {
+        &self.scenes[self.current_scene_index]
+    }
+
+    pub fn current_mut(&mut self) -> &mut PGAScene {
+        &mut self.scenes[self.current_scene_index]
+    }
+
+    pub fn next_scene(&mut self) -> &PGAScene {
+        self.current_scene_index = (self.current_scene_index + 1) % self.scenes.len();
+        self.current()
+    }
+
+    pub fn prev_scene(&mut self) -> &PGAScene {
+        if self.current_scene_index == 0 {
+            self.current_scene_index = self.scenes.len() - 1;
+        } else {
+            self.current_scene_index -= 1;
+        }
+        self.current()
+    }
+
+    pub fn len(&self) -> usize {
+        self.scenes.len()
+    }
+}
+
+/// Component to mark the scene name text UI element
+#[derive(Component)]
+struct SceneNameText;
+
+#[derive(Component)]
+struct PointLabel(usize);
+
+/// Resource containing PGA objects to visualize
+#[derive(Clone)]
+pub struct PGAScene {
+    pub name: &'static str,
+    pub points: Vec<Point>,
+    pub planes: Vec<Plane>,
+    pub lines: Vec<Line>,
+    pub directions: Vec<Direction>,
+}
+
+impl Default for PGAScene {
+    fn default() -> Self {
+        Self {
+            name: Self::EMPTY_SCENE,
+            points: Vec::new(),
+            planes: Vec::new(),
+            lines: Vec::new(),
+            directions: Vec::new(),
+        }
+    }
+}
+
+impl PGAScene {
+    const EMPTY_SCENE: &str = "Empty Scene";
+    const TWO_POINTS_JOIN_IN_A_LINE: &str = "Two points join in a line (P0 V P1)";
+    const THREE_POINTS_JOIN_IN_A_PLANE: &str = "Three points join in a plane (P0 V P1 V P2)";
+    const LINE_AND_POINT_JOIN_IN_A_PLANE: &str =
+        "A line and a point join in a plane ((P0 V P1) V P2)";
+
+    pub fn new(name: &'static str, points: &[&Point]) -> Self {
+        let mut scene = Self {
+            name,
+            points: points.iter().map(|&p| p.clone()).collect(),
+            planes: Vec::new(),
+            lines: Vec::new(),
+            directions: Vec::new(),
+        };
+
+        scene.rebuild();
+        scene
+    }
+
+    pub fn with_plane(&mut self, plane: Option<Plane>) {
+        if let Some(plane) = plane {
+            self.planes.push(plane);
+        }
+    }
+
+    pub fn with_line(&mut self, line: Option<Line>) {
+        if let Some(line) = line {
+            self.lines.push(line);
+        }
+    }
+
+    pub fn with_direction(mut self, direction: Option<Direction>) {
+        if let Some(direction) = direction {
+            self.directions.push(direction);
+        }
+    }
+
+    pub fn point(&self, index: usize) -> &Point {
+        &self.points[index]
+    }
+
+    pub fn rebuild(&mut self) {
+        self.lines.clear();
+        self.planes.clear();
+        self.directions.clear();
+        let p = self.points.clone();
+        match self.name {
+            Self::TWO_POINTS_JOIN_IN_A_LINE => {
+                self.with_line(&p[0] & &p[1]);
+            }
+            Self::THREE_POINTS_JOIN_IN_A_PLANE => {
+                self.with_plane(&p[0] & &p[1] & &p[2]);
+            }
+            Self::LINE_AND_POINT_JOIN_IN_A_PLANE => {
+                self.with_line(&p[0] & &p[1]);
+                self.with_plane(&p[0] & &p[1] & &p[2]);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn build_scenes() -> Vec<PGAScene> {
+    let p0 = &Point::new(1.0, 0.0, 0.0);
+    let p1 = &Point::new(0.0, 1.0, 0.0);
+    let p2 = &Point::new(0.0, 0.0, 1.0);
+
+    let scenes = vec![
+        PGAScene::default(),
+        PGAScene::new(PGAScene::TWO_POINTS_JOIN_IN_A_LINE, &[p0, p1]),
+        PGAScene::new(PGAScene::THREE_POINTS_JOIN_IN_A_PLANE, &[p0, p1, p2]),
+        PGAScene::new(PGAScene::LINE_AND_POINT_JOIN_IN_A_PLANE, &[p0, p1, p2]),
+    ];
+
+    scenes
+}
 
 /// Bevy app builder for PGA visualization
 pub struct PGAVisualizationApp;
@@ -21,9 +198,23 @@ impl PGAVisualizationApp {
             }),
             ..default()
         }))
+        .add_plugins(LookTransformPlugin)
+        .add_plugins(OrbitCameraPlugin {
+            override_input_system: true,
+        })
+        .add_plugins(EguiPlugin::default())
+        .add_event::<SceneChangedEvent>()
+        .add_event::<PointsChangedEvent>()
         .init_gizmo_group::<PGAGizmos>()
-        .add_systems(Startup, setup_scene)
-        .add_systems(Update, (update_camera_controller, draw_pga_gizmos));
+        .insert_resource(SceneLibrary::new())
+        .add_systems(Startup, (setup_scene, setup_ui))
+        .add_systems(Update, draw_pga_gizmos)
+        .add_systems(Update, input_map)
+        .add_systems(Update, scene_selection_input)
+        .add_systems(Update, update_scene_ui)
+        .add_systems(Update, update_point_labels)
+        .add_systems(PostUpdate, update_label_positions)
+        .add_systems(EguiPrimaryContextPass, coordinate_editor_ui);
 
         app
     }
@@ -34,165 +225,87 @@ impl PGAVisualizationApp {
     }
 }
 
-/// Camera controller component for orbiting around the scene
-#[derive(Component)]
-pub struct CameraController {
-    pub radius: f32,
-    pub theta: f32,
-    pub phi: f32,
-    pub target: Vec3,
-    pub sensitivity: f32,
-}
-
-impl Default for CameraController {
-    fn default() -> Self {
-        Self {
-            radius: 5.0,
-            theta: 0.0,
-            phi: std::f32::consts::PI / 4.0,
-            target: Vec3::ZERO,
-            sensitivity: 2.0,
-        }
-    }
-}
-
-/// Resource containing PGA objects to visualize
-#[derive(Resource, Default)]
-pub struct PGAScene {
-    pub points: Vec<Point>,
-    pub planes: Vec<Plane>,
-    pub lines: Vec<Line>,
-    pub directions: Vec<Direction>,
-}
-
-impl PGAScene {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn with_point(mut self, point: Point) -> Self {
-        self.points.push(point);
-        self
-    }
-
-    pub fn with_plane(mut self, plane: Plane) -> Self {
-        self.planes.push(plane);
-        self
-    }
-
-    pub fn with_line(mut self, line: Line) -> Self {
-        self.lines.push(line);
-        self
-    }
-
-    pub fn with_direction(mut self, direction: Direction) -> Self {
-        self.directions.push(direction);
-        self
-    }
-
-    pub fn add_point(&mut self, point: Point) {
-        self.points.push(point);
-    }
-
-    pub fn add_plane(&mut self, plane: Plane) {
-        self.planes.push(plane);
-    }
-
-    pub fn add_line(&mut self, line: Line) {
-        self.lines.push(line);
-    }
-
-    pub fn add_direction(&mut self, direction: Direction) {
-        self.directions.push(direction);
-    }
-}
-
 /// Setup the initial scene with camera and lighting
 fn setup_scene(mut commands: Commands) {
-    // Add a camera with orbit controller
-    commands.spawn((
-        Camera3d::default(),
-        Transform::from_translation(Vec3::new(5.0, 3.0, 5.0)).looking_at(Vec3::ZERO, Vec3::Y),
-        CameraController::default(),
-    ));
+    commands
+        .spawn(Camera3d::default())
+        .insert(OrbitCameraBundle::new(
+            OrbitCameraController::default(),
+            Vec3::new(3.0, 3.0, 3.0),
+            Vec3::new(0., 0., 0.),
+            Vec3::Y,
+        ));
 
-    // Add basic lighting
-    commands.spawn((
-        DirectionalLight {
-            shadows_enabled: true,
-            ..default()
-        },
-        Transform::from_rotation(Quat::from_euler(
-            EulerRot::ZYX,
-            0.0,
-            std::f32::consts::PI / 4.0,
-            -std::f32::consts::PI / 4.0,
-        )),
-    ));
-
-    // Add ambient light
-    commands.insert_resource(AmbientLight {
-        color: Color::WHITE,
-        brightness: 0.3,
-        affects_lightmapped_meshes: true,
-    });
-
-    // Initialize the PGA scene with a point at the origin
-    let mut scene = PGAScene::new();
-    scene.add_point(Point::new(0.0, 0.0, 0.0));
-
-    commands.insert_resource(scene);
+    for i in 0..10 {
+        commands.spawn((
+            Text::new(format!("P{}", i)),
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(0.0),
+                top: Val::Px(0.0),
+                ..default()
+            },
+            ZIndex(1000), // Ensure labels appear on top
+            PointLabel(i),
+            Visibility::Hidden,
+        ));
+    }
 }
 
-/// Simple camera controller for orbiting around the scene
-fn update_camera_controller(
-    time: Res<Time>,
-    mut query: Query<(&mut Transform, &mut CameraController)>,
-    input: Res<ButtonInput<KeyCode>>,
+/// Setup UI elements
+fn setup_ui(mut commands: Commands, windows: Query<&Window>) {
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    // Create UI text for scene name in top-left corner
+    commands.spawn((
+        Text::new("Left Mouse Down to orbit. Scroll to zoom. Press arrows to change scene."),
+        Node {
+            position_type: PositionType::Absolute,
+            left: Val::Px(10.0),
+            top: Val::Px(window.height() - 30.0),
+            ..default()
+        },
+        SceneNameText,
+    ));
+}
+
+/// Update the scene name text when scene changes
+fn update_scene_ui(
+    mut scenes: ResMut<SceneLibrary>,
+    mut on_scene_changed: EventReader<SceneChangedEvent>,
+    mut query: Query<&mut Text, With<SceneNameText>>,
 ) {
-    for (mut transform, mut controller) in query.iter_mut() {
-        let dt = time.delta_secs();
+    if on_scene_changed.read().next().is_none() {
+        return; // No scene change, no need to update UI
+    }
 
-        // Rotate camera around the target
-        if input.pressed(KeyCode::ArrowLeft) {
-            controller.theta -= controller.sensitivity * dt;
-        }
-        if input.pressed(KeyCode::ArrowRight) {
-            controller.theta += controller.sensitivity * dt;
-        }
-        if input.pressed(KeyCode::ArrowUp) {
-            controller.phi = (controller.phi - controller.sensitivity * dt)
-                .clamp(0.1, std::f32::consts::PI - 0.1);
-        }
-        if input.pressed(KeyCode::ArrowDown) {
-            controller.phi = (controller.phi + controller.sensitivity * dt)
-                .clamp(0.1, std::f32::consts::PI - 0.1);
-        }
+    for mut text in query.iter_mut() {
+        let current_scene = scenes.current_mut();
+        **text = current_scene.name.to_string();
+    }
+}
 
-        // Zoom in/out
-        if input.pressed(KeyCode::Equal) || input.pressed(KeyCode::NumpadAdd) {
-            controller.radius = (controller.radius - 5.0 * dt).max(1.0);
-        }
-        if input.pressed(KeyCode::Minus) {
-            controller.radius += 5.0 * dt;
-        }
-
-        // Calculate new camera position
-        let x = controller.radius * controller.phi.sin() * controller.theta.cos();
-        let y = controller.radius * controller.phi.cos();
-        let z = controller.radius * controller.phi.sin() * controller.theta.sin();
-
-        let position = controller.target + Vec3::new(x, y, z);
-        transform.translation = position;
-        transform.look_at(controller.target, Vec3::Y);
+/// System for keyboard scene selection
+fn scene_selection_input(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut scene_library: ResMut<SceneLibrary>,
+    mut notify_scene_changed: EventWriter<SceneChangedEvent>,
+) {
+    if keyboard.just_pressed(KeyCode::ArrowRight) || keyboard.just_pressed(KeyCode::BracketRight) {
+        scene_library.next_scene();
+        notify_scene_changed.write(SceneChangedEvent);
+    } else if keyboard.just_pressed(KeyCode::ArrowLeft)
+        || keyboard.just_pressed(KeyCode::BracketLeft)
+    {
+        scene_library.prev_scene();
+        notify_scene_changed.write(SceneChangedEvent);
     }
 }
 
 /// System to draw PGA objects using Bevy's gizmo API
-fn draw_pga_gizmos(mut gizmos: Gizmos<PGAGizmos>, scene: Option<Res<PGAScene>>) {
-    let Some(scene) = scene else {
-        return;
-    };
+fn draw_pga_gizmos(mut gizmos: Gizmos<PGAGizmos>, scenes: Res<SceneLibrary>) {
+    let scene = scenes.current();
 
     // Draw coordinate axes
     gizmos.line(Vec3::ZERO, Vec3::X * 2.0, LinearRgba::RED);
@@ -201,40 +314,35 @@ fn draw_pga_gizmos(mut gizmos: Gizmos<PGAGizmos>, scene: Option<Res<PGAScene>>) 
 
     // Draw points as small spheres
     for point in &scene.points {
-        let pos = pga_point_to_vec3(*point);
-        gizmos.sphere(pos, 0.1, LinearRgba::new(1.0, 1.0, 0.0, 1.0)); // Yellow
-
-        // Also draw a small cross to make points more visible
-        let size = 0.2;
-        let yellow = LinearRgba::new(1.0, 1.0, 0.0, 1.0);
-        gizmos.line(pos - Vec3::X * size, pos + Vec3::X * size, yellow);
-        gizmos.line(pos - Vec3::Y * size, pos + Vec3::Y * size, yellow);
-        gizmos.line(pos - Vec3::Z * size, pos + Vec3::Z * size, yellow);
+        let pos = pga_point_to_vec3(point);
+        gizmos.sphere(pos, 0.01, LinearRgba::new(1.0, 1.0, 0.0, 1.0)); // Yellow
     }
 
     // Draw directions as arrows from origin
     for direction in &scene.directions {
-        let dir = pga_direction_to_vec3(*direction);
-        gizmos.arrow(Vec3::ZERO, dir * 2.0, LinearRgba::new(0.0, 1.0, 1.0, 1.0)); // Cyan
+        let dir = pga_direction_to_vec3(direction);
+        gizmos.arrow(Vec3::ZERO, dir * 2.0, LinearRgba::new(0.0, 1.0, 1.0, 1.0));
+        // Cyan
     }
 
     // Draw lines
     for line in &scene.lines {
-        draw_pga_line(&mut gizmos, *line, LinearRgba::new(1.0, 0.5, 0.0, 1.0)); // Orange
+        draw_pga_line(&mut gizmos, line, LinearRgba::new(1.0, 0.5, 0.0, 1.0)); // Orange
     }
 
     // Draw planes as grids
     for plane in &scene.planes {
-        draw_pga_plane(&mut gizmos, *plane, LinearRgba::new(0.5, 0.0, 0.5, 1.0)); // Purple
+        draw_pga_plane(&mut gizmos, plane, LinearRgba::new(0.5, 0.0, 0.5, 1.0));
+        // Purple
     }
 }
 
 /// Convert a PGA Point to a Bevy Vec3
-fn pga_point_to_vec3(point: Point) -> Vec3 {
+fn pga_point_to_vec3(point: &Point) -> Vec3 {
     // Extract coordinates from the PGA point
     // In PGA, a point is represented as x*e032 + y*e013 + z*e021 + e123
     // We need to extract x, y, z coordinates
-    let pga = point.0;
+    let pga = &point.0;
 
     // Check if the point is at infinity (e123 component is zero)
     if pga.mvec[14].abs() < f32::EPSILON {
@@ -243,37 +351,37 @@ fn pga_point_to_vec3(point: Point) -> Vec3 {
 
     // Extract coordinates by dividing by the e123 component
     let w = pga.mvec[14]; // e123 component
-    let x = -pga.mvec[13] / w; // e032 component
-    let y = pga.mvec[11] / w; // e021 component  
-    let z = -pga.mvec[12] / w; // e013 component
+    let x = pga.mvec[13] / w; // e032 component
+    let y = pga.mvec[12] / w; // e013 component  
+    let z = pga.mvec[11] / w; // e021 component
 
     Vec3::new(x, y, z)
 }
 
 /// Convert a PGA Direction to a Bevy Vec3
-fn pga_direction_to_vec3(direction: Direction) -> Vec3 {
-    let pga = direction.0;
+fn pga_direction_to_vec3(direction: &Direction) -> Vec3 {
+    let pga = &direction.0;
 
     // Direction vectors are represented as x*e032 + y*e013 + z*e021
-    let x = -pga.mvec[13]; // e032 component
-    let y = pga.mvec[11]; // e021 component
-    let z = -pga.mvec[12]; // e013 component
+    let x = pga.mvec[13]; // e032 component
+    let y = pga.mvec[12]; // e013 component
+    let z = pga.mvec[11]; // e021 component
 
     Vec3::new(x, y, z)
 }
 
 /// Draw a PGA line using gizmos
-fn draw_pga_line(gizmos: &mut Gizmos<PGAGizmos>, line: Line, color: LinearRgba) {
-    let pga = line.0;
+fn draw_pga_line(gizmos: &mut Gizmos<PGAGizmos>, line: &Line, color: LinearRgba) {
+    let pga = &line.0;
 
     // Extract direction and moment components
-    let dir_x = pga.mvec[9]; // e31
-    let dir_y = pga.mvec[10]; // e23  
+    let dir_x = pga.mvec[10]; // e31
+    let dir_y = pga.mvec[9]; // e23
     let dir_z = pga.mvec[8]; // e12
 
-    let mom_x = pga.mvec[6]; // e02
-    let mom_y = pga.mvec[7]; // e03
-    let mom_z = pga.mvec[5]; // e01
+    let mom_x = pga.mvec[5]; // e02
+    let mom_y = pga.mvec[6]; // e03
+    let mom_z = pga.mvec[7]; // e01
 
     let direction = Vec3::new(dir_x, dir_y, dir_z);
     let moment = Vec3::new(mom_x, mom_y, mom_z);
@@ -307,12 +415,12 @@ fn draw_pga_line(gizmos: &mut Gizmos<PGAGizmos>, line: Line, color: LinearRgba) 
 }
 
 /// Draw a PGA plane using gizmos
-fn draw_pga_plane(gizmos: &mut Gizmos<PGAGizmos>, plane: Plane, color: LinearRgba) {
-    let pga = plane.0;
+fn draw_pga_plane(gizmos: &mut Gizmos<PGAGizmos>, plane: &Plane, color: LinearRgba) {
+    let pga = &plane.0;
 
     // Extract plane equation coefficients: ax + by + cz + d = 0
     let a = pga.mvec[2]; // e1
-    let b = pga.mvec[3]; // e2  
+    let b = pga.mvec[3]; // e2
     let c = pga.mvec[4]; // e3
     let d = pga.mvec[1]; // e0
 
@@ -361,4 +469,189 @@ fn draw_pga_plane(gizmos: &mut Gizmos<PGAGizmos>, plane: Plane, color: LinearRgb
 
     // Draw normal vector
     gizmos.arrow(point_on_plane, point_on_plane + normal * 1.0, color);
+}
+
+pub fn input_map(
+    mut events: EventWriter<ControlEvent>,
+    mut mouse_wheel_reader: EventReader<MouseWheel>,
+    mut mouse_motion_events: EventReader<MouseMotion>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
+    controllers: Query<&OrbitCameraController>,
+    mut contexts: EguiContexts,
+) {
+    // Check if egui is using the mouse - if so, don't process camera input
+    if let Ok(ctx) = contexts.ctx_mut() {
+        if ctx.is_pointer_over_area() || ctx.wants_pointer_input() {
+            // Clear the events to prevent camera movement when interacting with egui
+            for _ in mouse_motion_events.read() {}
+            for _ in mouse_wheel_reader.read() {}
+            return;
+        }
+    }
+
+    // Can only control one camera at a time.
+    let controller = if let Some(controller) = controllers.iter().find(|c| c.enabled) {
+        controller
+    } else {
+        return;
+    };
+    let OrbitCameraController {
+        mouse_rotate_sensitivity,
+        mouse_wheel_zoom_sensitivity,
+        pixels_per_line,
+        ..
+    } = *controller;
+
+    let mut cursor_delta = Vec2::ZERO;
+    for event in mouse_motion_events.read() {
+        cursor_delta += event.delta;
+    }
+
+    if mouse_buttons.pressed(MouseButton::Left) {
+        events.write(ControlEvent::Orbit(mouse_rotate_sensitivity * cursor_delta));
+    }
+
+    let mut scalar = 1.0;
+    for event in mouse_wheel_reader.read() {
+        // scale the event magnitude per pixel or per line
+        let scroll_amount = match event.unit {
+            MouseScrollUnit::Line => event.y,
+            MouseScrollUnit::Pixel => event.y / pixels_per_line,
+        };
+        scalar *= 1.0 - scroll_amount * mouse_wheel_zoom_sensitivity;
+    }
+
+    if scalar != 1.0 {
+        events.write(ControlEvent::Zoom(scalar));
+    }
+}
+
+fn update_point_labels(
+    scenes: Res<SceneLibrary>,
+    // Query existing labels to clean them up when scene changes
+    mut existing_labels: Query<(&mut Visibility, &PointLabel)>,
+    mut on_scene_changed: EventReader<SceneChangedEvent>,
+) {
+    if on_scene_changed.read().next().is_none() {
+        return; // No scene change, no need to update labels
+    }
+
+    let scene = scenes.current();
+    let num_points = scene.points.len();
+
+    for (mut visibility, &PointLabel(index)) in existing_labels.iter_mut() {
+        if index < num_points {
+            *visibility = Visibility::Visible;
+        } else {
+            *visibility = Visibility::Hidden;
+        }
+    }
+}
+
+fn update_label_positions(
+    camera_query: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    mut labels: Query<(&mut Node, &PointLabel)>,
+    scenes: Res<SceneLibrary>,
+    windows: Query<&Window>,
+) {
+    let scene = scenes.current();
+    let Ok((camera, camera_global_transform)) = camera_query.single() else {
+        return;
+    };
+
+    let Ok(window) = windows.single() else {
+        return;
+    };
+
+    for (mut node, PointLabel(index)) in labels.iter_mut() {
+        let Some(point) = scene.points.get(*index).map(|p| p) else {
+            continue;
+        };
+
+        let world_position = pga_point_to_vec3(point);
+
+        if let Ok(viewport_position) =
+            camera.world_to_viewport(camera_global_transform, world_position)
+        {
+            // Clamp positions to ensure they stay within reasonable bounds
+            let clamped_x = viewport_position.x.clamp(0.0, window.width() - 100.0);
+            let clamped_y = viewport_position.y.clamp(0.0, window.height() - 30.0);
+            node.left = Val::Px(clamped_x);
+            node.top = Val::Px(clamped_y);
+        }
+    }
+}
+
+/// System to display coordinate editor UI for points
+fn coordinate_editor_ui(
+    mut contexts: EguiContexts,
+    mut scenes: ResMut<SceneLibrary>,
+    mut notify_points_changed: EventWriter<PointsChangedEvent>,
+) {
+    // Get the primary window context
+    if let Ok(ctx) = contexts.ctx_mut() {
+        let scene = scenes.current_mut();
+        egui::Window::new("Point Coordinates")
+            .default_open(true)
+            .resizable(true)
+            .default_pos([10.0, 10.0])
+            .show(ctx, |ui| {
+                ui.heading("Edit Point Coordinates");
+                ui.separator();
+
+                let mut points_changed = false;
+
+                // Create a list of points with editable coordinates
+                for (index, point) in scene.points.iter_mut().enumerate() {
+                    ui.group(|ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(format!("P{}:", index));
+                        });
+
+                        ui.horizontal(|ui| {
+                            // Extract current coordinates
+                            let current_pos = pga_point_to_vec3(point);
+                            let mut x = current_pos.x;
+                            let mut y = current_pos.y;
+                            let mut z = current_pos.z;
+
+                            ui.label("X:");
+                            if ui
+                                .add(egui::DragValue::new(&mut x).speed(0.1).range(-10.0..=10.0))
+                                .changed()
+                            {
+                                points_changed = true;
+                            }
+
+                            ui.label("Y:");
+                            if ui
+                                .add(egui::DragValue::new(&mut y).speed(0.1).range(-10.0..=10.0))
+                                .changed()
+                            {
+                                points_changed = true;
+                            }
+
+                            ui.label("Z:");
+                            if ui
+                                .add(egui::DragValue::new(&mut z).speed(0.1).range(-10.0..=10.0))
+                                .changed()
+                            {
+                                points_changed = true;
+                            }
+
+                            // Update the point if any coordinate changed
+                            if points_changed {
+                                *point = Point::new(x, y, z);
+                            }
+                        });
+                    });
+                    ui.separator();
+                }
+
+                if points_changed {
+                    scene.rebuild();
+                    notify_points_changed.write(PointsChangedEvent);
+                }
+            });
+    }
 }
