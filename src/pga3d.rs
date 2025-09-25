@@ -265,6 +265,18 @@ macro_rules! define_optional_binary_op_all(
             $lhs: ZeroOr<$Lhs>, $rhs: ZeroOr<$Rhs>, Output = ZeroOr<$InnerResult>;
             {ZeroOr(($lhs).as_ref().and_then(|l| $rhs.as_ref().map(|r| l.$op(r).0)).flatten())};
         );
+
+        define_binary_op!(
+            $Op, $op;
+            $lhs: &ZeroOr<$Lhs>, $rhs: &ZeroOr<$Rhs>, Output = ZeroOr<$InnerResult>;
+            {ZeroOr(($lhs).as_ref().and_then(|l| $rhs.as_ref().map(|r| l.$op(r).0)).flatten())};
+        );
+
+        define_binary_op!(
+            $Op, $op;
+            $lhs: ZeroOr<$Lhs>, $rhs: &ZeroOr<$Rhs>, Output = ZeroOr<$InnerResult>;
+            {ZeroOr(($lhs).as_ref().and_then(|l| $rhs.as_ref().map(|r| l.$op(r).0)).flatten())};
+        );
     };
 
     (
@@ -312,6 +324,18 @@ macro_rules! define_optional_binary_op_all(
         define_binary_op!(
             $Op, $op;
             $lhs: ZeroOr<$Lhs>, $rhs: ZeroOr<$Rhs>, Output = ZeroOr<$Result>;
+            {ZeroOr(($lhs).as_ref().map(|l| $rhs.as_ref().map(|r| l.$op(r))).flatten())};
+        );
+
+        define_binary_op!(
+            $Op, $op;
+            $lhs: &ZeroOr<$Lhs>, $rhs: &ZeroOr<$Rhs>, Output = ZeroOr<$Result>;
+            {ZeroOr(($lhs).as_ref().map(|l| $rhs.as_ref().map(|r| l.$op(r))).flatten())};
+        );
+
+        define_binary_op!(
+            $Op, $op;
+            $lhs: ZeroOr<$Lhs>, $rhs: &ZeroOr<$Rhs>, Output = ZeroOr<$Result>;
             {ZeroOr(($lhs).as_ref().map(|l| $rhs.as_ref().map(|r| l.$op(r))).flatten())};
         );
     }
@@ -975,7 +999,7 @@ define_binary_op_all!(
     };
 );
 
-define_binary_op_all!(
+define_optional_binary_op_all!(
     Mul,
     mul;
     self: Line, b: Plane, Output = Point;
@@ -999,34 +1023,34 @@ define_binary_op_all!(
     };
 );
 
-define_binary_op_all!(
+define_optional_binary_op_all!(
     BitXor,
     bitxor;
-    self: Plane, b: Plane, Output = Option<Line>;
+    self: Plane, b: Plane, Output = ZeroOr<Line>;
     [val val] => &self ^ &b;
     [ref val] =>  self ^ &b;
     [val ref] => &self ^  b;
     [ref ref] => {
         let obj = &self.0 ^ &b.0;
         if obj.is_zero() {
-            None
+            ZeroOr(None)
         } else {
-            Some(Line(obj))
+            ZeroOr(Some(Line(obj)))
         }
     };
 );
 
-define_binary_op_all!(
-    BitXor,
-    bitxor;
-    self: Option<Plane>, b: Plane, Output = Option<Line>;
-    [val val] => &self ^ &b;
-    [ref val] =>  self ^ &b;
-    [val ref] => &self ^  b;
-    [ref ref] => {
-        self.as_ref().and_then(|plane| plane ^ b)
-    };
-);
+// define_binary_op_all!(
+//     BitXor,
+//     bitxor;
+//     self: Option<Plane>, b: Plane, Output = Option<Line>;
+//     [val val] => &self ^ &b;
+//     [ref val] =>  self ^ &b;
+//     [val ref] => &self ^  b;
+//     [ref ref] => {
+//         self.as_ref().and_then(|plane| plane ^ b)
+//     };
+// );
 
 // define_binary_op_all!(
 //     BitXor,
@@ -1041,19 +1065,19 @@ define_binary_op_all!(
 //     };
 // );
 
-define_binary_op_all!(
+define_optional_binary_op_all!(
     BitXor,
     bitxor;
-    self: Line, b: Plane, Output = Option<Point>;
+    self: Line, b: Plane, Output = ZeroOr<Point>;
     [val val] => &self ^ &b;
     [ref val] =>  self ^ &b;
     [val ref] => &self ^  b;
     [ref ref] => {
         let obj = &self.0 ^ &b.0;
         if obj.is_zero() {
-            None
+            ZeroOr(None)
         } else {
-            Some(Point(obj))
+            ZeroOr(Some(Point(obj)))
         }
     };
 );
@@ -1095,17 +1119,17 @@ define_binary_op_all!(
     };
 );
 
-define_binary_op_all!(
-    BitXor,
-    bitxor;
-    self: Option<Line>, b: Plane, Output = Option<Point>;
-    [val val] => &self ^ &b;
-    [ref val] =>  self ^ &b;
-    [val ref] => &self ^  b;
-    [ref ref] => {
-        self.as_ref().and_then(|line| line ^ b)
-    };
-);
+// define_binary_op_all!(
+//     BitXor,
+//     bitxor;
+//     self: ZeroOr<Line>, b: Plane, Output = Option<Point>;
+//     [val val] => &self ^ &b;
+//     [ref val] =>  self ^ &b;
+//     [val ref] => &self ^  b;
+//     [ref ref] => {
+//         self.as_ref().and_then(|line| line ^ b)
+//     };
+// );
 
 define_binary_op_all!(
     BitOr,
