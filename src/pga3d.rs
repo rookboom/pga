@@ -36,6 +36,18 @@ impl<T> ZeroOr<T> {
     pub fn value(self) -> Option<T> {
         self.0
     }
+
+    pub fn unwrap(self) -> T {
+        self.0.unwrap()
+    }
+
+    pub fn is_zero(&self) -> bool {
+        self.0.is_none()
+    }
+
+    pub fn is_valid(&self) -> bool {
+        self.0.is_some()
+    }
 }
 
 impl PGA3D {

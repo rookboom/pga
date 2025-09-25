@@ -1,21 +1,21 @@
 #[cfg(test)]
 mod tests {
-    use crate::pga3d::{Direction, Line, Plane, Point};
+    use crate::pga3d::{Direction, Line, Plane, Point, ZeroOr};
     use crate::{ApproxEq, assert_approx_eq};
 
     #[test]
     fn two_points_join_in_a_line() {
         let p0 = Point::new(0.0, 0.0, 0.0);
         let p1 = Point::new(1.0, 0.0, 0.0);
-        let line1: Option<Line> = p0 & p1;
-        assert!(line1.is_some());
+        let line1: ZeroOr<Line> = p0 & p1;
+        assert!(line1.is_valid());
     }
 
     #[test]
     fn identical_points_do_not_join_in_a_line() {
         let p1 = &Point::new(1.0, 0.0, 0.0);
-        let degenerate_line1: Option<Line> = p1 & p1;
-        assert!(degenerate_line1.is_none());
+        let degenerate_line1: ZeroOr<Line> = p1 & p1;
+        assert!(degenerate_line1.is_zero());
     }
 
     #[test]
@@ -23,8 +23,8 @@ mod tests {
         let p0 = Point::new(0.0, 0.0, 0.0);
         let p1 = Point::new(1.0, 0.0, 0.0);
         let p2 = Point::new(0.0, 1.0, 0.0);
-        let plane1: Option<Plane> = p0 & p1 & p2;
-        assert!(plane1.is_some());
+        let plane1: ZeroOr<Plane> = p0 & p1 & p2;
+        assert!(plane1.is_valid());
     }
 
     #[test]
@@ -32,21 +32,21 @@ mod tests {
         let p0 = Point::new(0.0, 0.0, 0.0);
         let p1 = Point::new(1.0, 0.0, 0.0);
         let p2 = Point::new(2.0, 0.0, 0.0);
-        let plane1: Option<Plane> = p0 & p1 & p2;
-        assert!(plane1.is_none());
+        let plane1: ZeroOr<Plane> = p0 & p1 & p2;
+        assert!(plane1.is_zero());
     }
 
     #[test]
     fn two_planes_meet_in_a_line() {
-        let line: Option<Line> = Plane::E1 ^ Plane::E2;
-        assert!(line.is_some());
+        let line: ZeroOr<Line> = Plane::E1 ^ Plane::E2;
+        assert!(line.is_valid());
     }
 
     #[test]
     fn three_planes_meet_in_a_point() {
-        let origin: Option<Point> = Plane::E1 ^ Plane::E2 ^ Plane::E3;
-        assert!(origin.is_some());
-        assert_eq!(origin, Some(Point::new(0.0, 0.0, 0.0)));
+        let origin: ZeroOr<Point> = Plane::E1 ^ Plane::E2 ^ Plane::E3;
+        assert_eq!(origin.as_ref(), Some(&Point::new(0., 0.0, 0.0)));
+        assert!(origin.is_valid());
     }
 
     #[test]
@@ -98,7 +98,7 @@ mod tests {
         let p2 = Point::new(0.0, 1.0, 0.0);
         let line: Line = (p0 & p1).unwrap();
         let plane = line & p2;
-        assert!(plane.is_some());
+        assert!(plane.is_valid());
     }
 
     #[test]
@@ -108,7 +108,7 @@ mod tests {
         let p2 = Point::new(2.0, 0.0, 0.0);
         let line: Line = (p0 & p1).unwrap();
         let plane = line & p2;
-        assert!(plane.is_none());
+        assert!(plane.is_zero());
     }
 
     #[test]

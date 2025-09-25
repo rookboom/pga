@@ -7,7 +7,6 @@ use bevy::{
     gizmos::config::GizmoConfigGroup,
     input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel},
     prelude::*,
-    text,
 };
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui};
 use smooth_bevy_cameras::{
