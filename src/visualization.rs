@@ -253,14 +253,17 @@ fn setup_scene(mut commands: Commands) {
 }
 
 /// Setup UI elements
-fn setup_ui(mut commands: Commands) {
+fn setup_ui(mut commands: Commands, windows: Query<&Window>) {
+    let Ok(window) = windows.single() else {
+        return;
+    };
     // Create UI text for scene name in top-left corner
     commands.spawn((
-        Text::new("Press arrows to change scene."),
+        Text::new("Left Mouse Down to orbit. Scroll to zoom. Press arrows to change scene."),
         Node {
             position_type: PositionType::Absolute,
             left: Val::Px(10.0),
-            top: Val::Px(10.0),
+            top: Val::Px(window.height() - 30.0),
             ..default()
         },
         SceneNameText,
@@ -517,13 +520,16 @@ pub fn input_map(
         };
         scalar *= 1.0 - scroll_amount * mouse_wheel_zoom_sensitivity;
     }
-    events.write(ControlEvent::Zoom(scalar));
+
+    if scalar != 1.0 {
+        events.write(ControlEvent::Zoom(scalar));
+    }
 }
 
 fn update_point_labels(
     scenes: Res<SceneLibrary>,
     // Query existing labels to clean them up when scene changes
-    mut existing_labels: Query<&mut Visibility, With<PointLabel>>,
+    mut existing_labels: Query<(&mut Visibility, &PointLabel)>,
     mut on_scene_changed: EventReader<SceneChangedEvent>,
 ) {
     if on_scene_changed.read().next().is_none() {
@@ -533,12 +539,11 @@ fn update_point_labels(
     let scene = scenes.current();
     let num_points = scene.points.len();
 
-    // Create new labels for current scene points
-    for (index, mut visibility) in existing_labels.iter_mut().enumerate() {
-        if index >= num_points {
-            *visibility = Visibility::Hidden;
-        } else {
+    for (mut visibility, &PointLabel(index)) in existing_labels.iter_mut() {
+        if index < num_points {
             *visibility = Visibility::Visible;
+        } else {
+            *visibility = Visibility::Hidden;
         }
     }
 }
@@ -548,12 +553,7 @@ fn update_label_positions(
     mut labels: Query<(&mut Node, &PointLabel)>,
     scenes: Res<SceneLibrary>,
     windows: Query<&Window>,
-    mut on_scene_changed: EventReader<SceneChangedEvent>,
-    mut on_points_changed: EventReader<PointsChangedEvent>,
 ) {
-    if on_points_changed.read().next().is_none() && on_scene_changed.read().next().is_none() {
-        return; // No points change, no need to update labels
-    }
     let scene = scenes.current();
     let Ok((camera, camera_global_transform)) = camera_query.single() else {
         return;
@@ -564,31 +564,20 @@ fn update_label_positions(
     };
 
     for (mut node, PointLabel(index)) in labels.iter_mut() {
-        info!("Updating label positions for point {index}...");
-
         let Some(point) = scene.points.get(*index).map(|p| p) else {
             continue;
         };
 
         let world_position = pga_point_to_vec3(point);
 
-        // Get viewport position and handle the case where point is behind camera
         if let Ok(viewport_position) =
             camera.world_to_viewport(camera_global_transform, world_position)
         {
             // Clamp positions to ensure they stay within reasonable bounds
             let clamped_x = viewport_position.x.clamp(0.0, window.width() - 100.0);
             let clamped_y = viewport_position.y.clamp(0.0, window.height() - 30.0);
-
-            info!("Point {} viewport position: {:?}", index, viewport_position);
             node.left = Val::Px(clamped_x);
             node.top = Val::Px(clamped_y);
-
-            // Make sure the node is visible
-            node.display = Display::Flex;
-        } else {
-            // Hide the label if the point is behind the camera
-            node.display = Display::None;
         }
     }
 }
@@ -605,6 +594,7 @@ fn coordinate_editor_ui(
         egui::Window::new("Point Coordinates")
             .default_open(true)
             .resizable(true)
+            .default_pos([10.0, 10.0])
             .show(ctx, |ui| {
                 ui.heading("Edit Point Coordinates");
                 ui.separator();
@@ -660,7 +650,6 @@ fn coordinate_editor_ui(
 
                 if points_changed {
                     scene.rebuild();
-                    info!("Points changed, scene rebuilt.");
                     notify_points_changed.write(PointsChangedEvent);
                 }
             });
