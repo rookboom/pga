@@ -25,6 +25,19 @@ pub(crate) struct PGA3D {
     pub(crate) mvec: [float_t; basis_count],
 }
 
+#[derive(Default, Debug, Clone, PartialEq)]
+pub struct ZeroOr<T>(Option<T>);
+
+impl<T> ZeroOr<T> {
+    pub fn as_ref(&self) -> Option<&T> {
+        self.0.as_ref()
+    }
+
+    pub fn value(self) -> Option<T> {
+        self.0
+    }
+}
+
 impl PGA3D {
     pub const fn zero() -> Self {
         Self {
@@ -203,6 +216,145 @@ macro_rules! define_binary_op_all(
         );
     }
 );
+
+macro_rules! define_optional_binary_op_all(
+        (
+        $Op: ident, $op: ident;
+        $lhs: ident: $Lhs: ty, $rhs: ident: $Rhs: ty, Output = ZeroOr<$InnerResult: ty>;
+        [val val] => $action_val_val: expr;
+        [ref val] => $action_ref_val: expr;
+        [val ref] => $action_val_ref: expr;
+        [ref ref] => $action_ref_ref: expr;
+    ) => {
+        // Option<T> op T -> Option<Result>
+        define_binary_op_all!(
+            $Op, $op;
+            $lhs: $Lhs, $rhs: $Rhs, Output = ZeroOr<$InnerResult>;
+            [val val] => $action_val_val;
+            [ref val] => $action_ref_val;
+            [val ref] => $action_val_ref;
+            [ref ref] => $action_ref_ref;
+        );
+
+        define_binary_op!(
+            $Op, $op;
+            $lhs: ZeroOr<$Lhs>, $rhs: $Rhs, Output = ZeroOr<$InnerResult>;
+            {ZeroOr(($lhs).as_ref().and_then(|l| l.$op(&$rhs).0))};
+        );
+
+        define_binary_op!(
+            $Op, $op;
+            $lhs: ZeroOr<$Lhs>, $rhs: &$Rhs, Output = ZeroOr<$InnerResult>;
+            {ZeroOr(($lhs).as_ref().and_then(|l| l.$op($rhs).0))};
+        );
+
+        define_binary_op!(
+            $Op, $op;
+            $lhs: $Lhs, $rhs: ZeroOr<$Rhs>, Output = ZeroOr<$InnerResult>;
+            {ZeroOr(($rhs).as_ref().and_then(|r| (&$lhs).$op(r).0))};
+        );
+
+        define_binary_op!(
+            $Op, $op;
+            $lhs: &$Lhs, $rhs: ZeroOr<$Rhs>, Output = ZeroOr<$InnerResult>;
+            {ZeroOr(($rhs).as_ref().and_then(|r| ($lhs).$op(r).0))};
+        );
+
+        define_binary_op!(
+            $Op, $op;
+            $lhs: ZeroOr<$Lhs>, $rhs: ZeroOr<$Rhs>, Output = ZeroOr<$InnerResult>;
+            {ZeroOr(($lhs).as_ref().and_then(|l| $rhs.as_ref().map(|r| l.$op(r).0)).flatten())};
+        );
+    };
+
+    (
+        $Op: ident, $op: ident;
+        $lhs: ident: $Lhs: ty, $rhs: ident: $Rhs: ty, Output = $Result: ty;
+        [val val] => $action_val_val: expr;
+        [ref val] => $action_ref_val: expr;
+        [val ref] => $action_val_ref: expr;
+        [ref ref] => $action_ref_ref: expr;
+    ) => {
+        // Option<T> op T -> Option<Result>
+        define_binary_op_all!(
+            $Op, $op;
+            $lhs: $Lhs, $rhs: $Rhs, Output = $Result;
+            [val val] => $action_val_val;
+            [ref val] => $action_ref_val;
+            [val ref] => $action_val_ref;
+            [ref ref] => $action_ref_ref;
+        );
+
+        define_binary_op!(
+            $Op, $op;
+            $lhs: ZeroOr<$Lhs>, $rhs: $Rhs, Output = ZeroOr<$Result>;
+            {ZeroOr(($lhs).as_ref().map(|l| l.$op(&$rhs)))};
+        );
+
+        define_binary_op!(
+            $Op, $op;
+            $lhs: ZeroOr<$Lhs>, $rhs: &$Rhs, Output = ZeroOr<$Result>;
+            {ZeroOr(($lhs).as_ref().map(|l| l.$op($rhs)))};
+        );
+
+        define_binary_op!(
+            $Op, $op;
+            $lhs: $Lhs, $rhs: ZeroOr<$Rhs>, Output = ZeroOr<$Result>;
+            {ZeroOr(($rhs).as_ref().map(|r| (&$lhs).$op(r)))};
+        );
+
+        define_binary_op!(
+            $Op, $op;
+            $lhs: &$Lhs, $rhs: ZeroOr<$Rhs>, Output = ZeroOr<$Result>;
+            {ZeroOr(($rhs).as_ref().map(|r| ($lhs).$op(r)))};
+        );
+
+        define_binary_op!(
+            $Op, $op;
+            $lhs: ZeroOr<$Lhs>, $rhs: ZeroOr<$Rhs>, Output = ZeroOr<$Result>;
+            {ZeroOr(($lhs).as_ref().map(|l| $rhs.as_ref().map(|r| l.$op(r))).flatten())};
+        );
+    }
+);
+
+// macro_rules! define_optional_binary_op_flatten_all(
+//     (
+//         $Op: ident, $op: ident;
+//         $lhs: ident: $Lhs: ty, $rhs: ident: $Rhs: ty, Output = $Result: ty;
+//         [val val] => $action_val_val: expr;
+//         [ref val] => $action_ref_val: expr;
+//         [val ref] => $action_val_ref: expr;
+//         [ref ref] => $action_ref_ref: expr;
+//     ) => {
+//         // Option<T> op T -> Option<Result>
+//         define_binary_op_all!(
+//             $Op, $op;
+//             $lhs: $Lhs, $rhs: $Rhs, Output = $Result;
+//             [val val] => $action_val_val;
+//             [ref val] => $action_ref_val;
+//             [val ref] => $action_val_ref;
+//             [ref ref] => $action_ref_ref;
+//         );
+
+//         define_binary_op!(
+//             $Op, $op;
+//             $lhs: Option<$Lhs>, $rhs: $Rhs, Output = $Result;
+//             {($lhs).as_ref().and_then(|l| l.$op(&$rhs))};
+//         );
+
+//         define_binary_op!(
+//             $Op, $op;
+//             $lhs: $Lhs, $rhs: Option<$Rhs>, Output = $Result;
+//             {($rhs).as_ref().and_then(|r| $lhs.$op(&r))};
+//         );
+
+//         define_binary_op!(
+//             $Op, $op;
+//             $lhs: Option<$Lhs>, $rhs: Option<$Rhs>, Output = $Result;
+//             {($lhs).as_ref().and_then(|l| l.$op(&$rhs))};
+//         );
+//     }
+// );
 
 // TODO define_unary_op
 
@@ -751,16 +903,16 @@ pub struct Plane(pub(crate) PGA3D);
 define_binary_op_all!(
     Add,
     add;
-    self: Point, b: Point, Output = Option<Line>;
+    self: Point, b: Point, Output = ZeroOr<Line>;
     [val val] => &self + &b;
     [ref val] =>  self + &b;
     [val ref] => &self +  b;
     [ref ref] => {
         let obj = &self.0 + &b.0;
         if obj.is_zero() {
-            None
+            ZeroOr(None)
         } else {
-            Some(Line(obj))
+            ZeroOr(Some(Line(obj)))
         }
     };
 );
@@ -768,50 +920,38 @@ define_binary_op_all!(
 define_binary_op_all!(
     BitAnd,
     bitand;
-    self: Point, b: Point, Output = Option<Line>;
+    self: Point, b: Point, Output = ZeroOr<Line>;
     [val val] => &self & &b;
     [ref val] =>  self & &b;
     [val ref] => &self &  b;
     [ref ref] => {
         let obj = &self.0 & &b.0;
         if obj.is_zero() {
-            None
+            ZeroOr(None)
         } else {
-            Some(Line(obj))
+            ZeroOr(Some(Line(obj)))
         }
     };
 );
 
-define_binary_op_all!(
+define_optional_binary_op_all!(
     BitAnd,
     bitand;
-    self: Line, b: Point, Output = Option<Plane>;
+    self: Line, b: Point, Output = ZeroOr<Plane>;
     [val val] => &self & &b;
     [ref val] =>  self & &b;
     [val ref] => &self &  b;
     [ref ref] => {
         let obj = &self.0 & &b.0;
         if obj.is_zero() {
-            None
+            ZeroOr(None)
         } else {
-            Some(Plane(obj))
+            ZeroOr(Some(Plane(obj)))
         }
     };
 );
 
-define_binary_op_all!(
-    BitAnd,
-    bitand;
-    self: Option<Line>, b: Point, Output = Option<Plane>;
-    [val val] => &self & &b;
-    [ref val] =>  self & &b;
-    [val ref] => &self &  b;
-    [ref ref] => {
-        self.as_ref().and_then(|line| line & b)
-    };
-);
-
-define_binary_op_all!(
+define_optional_binary_op_all!(
     BitOr,
     bitor;
     self: Plane, b: Point, Output = Line;
@@ -879,6 +1019,31 @@ define_binary_op_all!(
 define_binary_op_all!(
     BitXor,
     bitxor;
+    self: Option<Plane>, b: Plane, Output = Option<Line>;
+    [val val] => &self ^ &b;
+    [ref val] =>  self ^ &b;
+    [val ref] => &self ^  b;
+    [ref ref] => {
+        self.as_ref().and_then(|plane| plane ^ b)
+    };
+);
+
+// define_binary_op_all!(
+//     BitXor,
+//     bitxor;
+//     self: Option<Plane>, b: Option<Plane>, Output = Option<Line>;
+//     [val val] => &self ^ &b;
+//     [ref val] =>  self ^ &b;
+//     [val ref] => &self ^  b;
+//     [ref ref] => {
+//         b.as_ref().and_then(|b| self ^ b)
+
+//     };
+// );
+
+define_binary_op_all!(
+    BitXor,
+    bitxor;
     self: Line, b: Plane, Output = Option<Point>;
     [val val] => &self ^ &b;
     [ref val] =>  self ^ &b;
@@ -892,6 +1057,22 @@ define_binary_op_all!(
         }
     };
 );
+
+// define_binary_op_all!(
+//     BitXor,
+//     bitxor;
+//     self: Option<Line>, b: Option<Plane>, Output = Option<Point>;
+//     [val val] => &self ^ &b;
+//     [ref val] =>  self ^ &b;
+//     [val ref] => &self ^  b;
+//     [ref ref] => {
+//         match (self, b) {
+//             (None, _) => None,
+//             (_, None) => None,
+//             (Some(line), Some(plane)) => line ^ plane,
+//         }
+//     };
+// );
 
 define_binary_op_all!(
     BitXor,

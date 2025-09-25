@@ -16,7 +16,7 @@ use smooth_bevy_cameras::{
     },
 };
 
-use crate::{Direction, Line, Plane, Point};
+use crate::{Direction, Line, Plane, Point, pga3d::ZeroOr};
 
 /// Configuration for the PGA visualization
 #[derive(Default, Reflect, GizmoConfigGroup)]
@@ -81,7 +81,14 @@ impl SceneLibrary {
 struct SceneNameText;
 
 #[derive(Component)]
-struct PointLabel(usize);
+struct Label((usize, GeometricObject));
+
+enum GeometricObject {
+    Point,
+    Line,
+    Plane,
+    Direction,
+}
 
 /// Resource containing PGA objects to visualize
 #[derive(Clone)]
@@ -111,6 +118,8 @@ impl PGAScene {
     const THREE_POINTS_JOIN_IN_A_PLANE: &str = "Three points join in a plane (P0 V P1 V P2)";
     const LINE_AND_POINT_JOIN_IN_A_PLANE: &str =
         "A line and a point join in a plane ((P0 V P1) V P2)";
+    const THREE_PLANES_MEET_IN_A_POINT: &str =
+        "Three planes meet in a point ((P0 V P1 V P2) ^ (P3 V P4 V P5) ^ (P6 V P7 V P8))";
 
     pub fn new(name: &'static str, points: &[&Point]) -> Self {
         let mut scene = Self {
@@ -125,20 +134,26 @@ impl PGAScene {
         scene
     }
 
-    pub fn with_plane(&mut self, plane: Option<Plane>) {
-        if let Some(plane) = plane {
+    pub fn with_point(&mut self, point: ZeroOr<Point>) {
+        if let Some(point) = point.value() {
+            self.points.push(point);
+        }
+    }
+
+    pub fn with_plane(&mut self, plane: ZeroOr<Plane>) {
+        if let Some(plane) = plane.value() {
             self.planes.push(plane);
         }
     }
 
-    pub fn with_line(&mut self, line: Option<Line>) {
-        if let Some(line) = line {
+    pub fn with_line(&mut self, line: ZeroOr<Line>) {
+        if let Some(line) = line.value() {
             self.lines.push(line);
         }
     }
 
-    pub fn with_direction(mut self, direction: Option<Direction>) {
-        if let Some(direction) = direction {
+    pub fn with_direction(mut self, direction: ZeroOr<Direction>) {
+        if let Some(direction) = direction.value() {
             self.directions.push(direction);
         }
     }
@@ -163,6 +178,15 @@ impl PGAScene {
                 self.with_line(&p[0] & &p[1]);
                 self.with_plane(&p[0] & &p[1] & &p[2]);
             }
+            // Self::THREE_PLANES_MEET_IN_A_POINT => {
+            //     let plane0 = &p[0] & &p[1] & &p[2];
+            //     let plane1 = &p[3] & &p[4] & &p[5];
+            //     let plane2 = &p[6] & &p[7] & &p[8];
+            //     self.with_point(&plane0 ^ &plane1 ^ &plane2);
+            //     self.with_plane(plane0);
+            //     self.with_plane(plane1);
+            //     self.with_plane(plane2);
+            // }
             _ => {}
         }
     }
@@ -178,6 +202,7 @@ fn build_scenes() -> Vec<PGAScene> {
         PGAScene::new(PGAScene::TWO_POINTS_JOIN_IN_A_LINE, &[p0, p1]),
         PGAScene::new(PGAScene::THREE_POINTS_JOIN_IN_A_PLANE, &[p0, p1, p2]),
         PGAScene::new(PGAScene::LINE_AND_POINT_JOIN_IN_A_PLANE, &[p0, p1, p2]),
+        PGAScene::new(PGAScene::THREE_PLANES_MEET_IN_A_POINT, &[p0, p1, p2]),
     ];
 
     scenes
@@ -236,19 +261,31 @@ fn setup_scene(mut commands: Commands) {
             Vec3::Y,
         ));
 
-    for i in 0..10 {
-        commands.spawn((
-            Text::new(format!("P{}", i)),
+    let create_label = |index, kind| {
+        let text = match kind {
+            GeometricObject::Point => format!("P{}", index),
+            GeometricObject::Line => format!("L{}", index),
+            GeometricObject::Plane => format!("p{}", index),
+            GeometricObject::Direction => format!("D{}", index),
+        };
+        (
+            Text::new(text),
             Node {
                 position_type: PositionType::Absolute,
                 left: Val::Px(0.0),
                 top: Val::Px(0.0),
                 ..default()
             },
-            ZIndex(1000), // Ensure labels appear on top
-            PointLabel(i),
+            ZIndex(1000),
+            Label((index, kind)),
             Visibility::Hidden,
-        ));
+        )
+    };
+    for i in 0..10 {
+        commands.spawn(create_label(i, GeometricObject::Point));
+        commands.spawn(create_label(i, GeometricObject::Line));
+        commands.spawn(create_label(i, GeometricObject::Plane));
+        commands.spawn(create_label(i, GeometricObject::Direction));
     }
 }
 
@@ -356,6 +393,57 @@ fn pga_point_to_vec3(point: &Point) -> Vec3 {
     let z = pga.mvec[11] / w; // e021 component
 
     Vec3::new(x, y, z)
+}
+
+fn pga_point_on_plane(plane: &Plane) -> Vec3 {
+    let pga = &plane.0;
+
+    // Extract plane equation coefficients: ax + by + cz + d = 0
+    let a = pga.mvec[2]; // e1
+    let b = pga.mvec[3]; // e2
+    let c = pga.mvec[4]; // e3
+    let d = pga.mvec[1]; // e0
+
+    let normal = Vec3::new(a, b, c);
+
+    if normal.length() < f32::EPSILON {
+        return Vec3::ZERO; // Invalid plane
+    }
+
+    let normal = normal.normalize();
+
+    // Find a point on the plane
+    let distance = -d / Vec3::new(a, b, c).length();
+    normal * distance
+}
+
+fn pga_point_on_line(line: &Line) -> Vec3 {
+    let pga = &line.0;
+
+    // Extract direction and moment components
+    let dir_x = pga.mvec[10]; // e31
+    let dir_y = pga.mvec[9]; // e23
+    let dir_z = pga.mvec[8]; // e12
+
+    let mom_x = pga.mvec[5]; // e02
+    let mom_y = pga.mvec[6]; // e03
+    let mom_z = pga.mvec[7]; // e01
+
+    let direction = Vec3::new(dir_x, dir_y, dir_z);
+    let moment = Vec3::new(mom_x, mom_y, mom_z);
+
+    // If direction is zero, this is an ideal line (line at infinity)
+    if direction.length() < f32::EPSILON {
+        return Vec3::ZERO; // Ideal line, return origin as placeholder
+    }
+
+    // Find a point on the line using the relationship: point = direction × moment / |direction|²
+    let dir_length_sq = direction.length_squared();
+    if dir_length_sq > f32::EPSILON {
+        direction.cross(moment) / dir_length_sq
+    } else {
+        Vec3::ZERO
+    }
 }
 
 /// Convert a PGA Direction to a Bevy Vec3
@@ -529,7 +617,7 @@ pub fn input_map(
 fn update_point_labels(
     scenes: Res<SceneLibrary>,
     // Query existing labels to clean them up when scene changes
-    mut existing_labels: Query<(&mut Visibility, &PointLabel)>,
+    mut existing_labels: Query<(&mut Visibility, &Label)>,
     mut on_scene_changed: EventReader<SceneChangedEvent>,
 ) {
     if on_scene_changed.read().next().is_none() {
@@ -537,10 +625,15 @@ fn update_point_labels(
     }
 
     let scene = scenes.current();
-    let num_points = scene.points.len();
 
-    for (mut visibility, &PointLabel(index)) in existing_labels.iter_mut() {
-        if index < num_points {
+    for (mut visibility, Label((index, kind))) in existing_labels.iter_mut() {
+        let num_points = match kind {
+            GeometricObject::Point => scene.points.len(),
+            GeometricObject::Line => scene.lines.len(),
+            GeometricObject::Plane => scene.planes.len(),
+            GeometricObject::Direction => scene.directions.len(),
+        };
+        if *index < num_points {
             *visibility = Visibility::Visible;
         } else {
             *visibility = Visibility::Hidden;
@@ -550,7 +643,7 @@ fn update_point_labels(
 
 fn update_label_positions(
     camera_query: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
-    mut labels: Query<(&mut Node, &PointLabel)>,
+    mut labels: Query<(&mut Node, &Label)>,
     scenes: Res<SceneLibrary>,
     windows: Query<&Window>,
 ) {
@@ -563,12 +656,37 @@ fn update_label_positions(
         return;
     };
 
-    for (mut node, PointLabel(index)) in labels.iter_mut() {
-        let Some(point) = scene.points.get(*index).map(|p| p) else {
-            continue;
+    for (mut node, Label((index, kind))) in labels.iter_mut() {
+        let world_position = match kind {
+            GeometricObject::Point => {
+                if let Some(point) = scene.points.get(*index) {
+                    pga_point_to_vec3(point)
+                } else {
+                    continue;
+                }
+            }
+            GeometricObject::Line => {
+                if let Some(line) = scene.lines.get(*index) {
+                    pga_point_on_line(line)
+                } else {
+                    continue;
+                }
+            }
+            GeometricObject::Plane => {
+                if let Some(plane) = scene.planes.get(*index) {
+                    pga_point_on_plane(plane)
+                } else {
+                    continue;
+                }
+            }
+            GeometricObject::Direction => {
+                if let Some(direction) = scene.directions.get(*index) {
+                    pga_direction_to_vec3(direction)
+                } else {
+                    continue;
+                }
+            }
         };
-
-        let world_position = pga_point_to_vec3(point);
 
         if let Ok(viewport_position) =
             camera.world_to_viewport(camera_global_transform, world_position)
