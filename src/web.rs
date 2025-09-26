@@ -1,4 +1,4 @@
-use crate::visualization::{PGAScene, PGAVisualizationApp};
+use crate::visualization::PGAVisualizationApp;
 use wasm_bindgen::prelude::*;
 
 /// Initialize the PGA visualization for web
@@ -7,16 +7,7 @@ pub fn start() {
     // Set panic hook for better error messages in web console
     console_error_panic_hook::set_once();
 
-    // Create a demo scene
-    let scene = PGAScene::demo();
-
-    // Create and configure the Bevy app
     let mut app = PGAVisualizationApp::new();
-
-    // Insert our scene
-    app.insert_resource(scene);
-
-    // Run the visualization
     app.run();
 }
 

@@ -118,8 +118,7 @@ impl PGAScene {
     const THREE_POINTS_JOIN_IN_A_PLANE: &str = "Three points join in a plane (P0 V P1 V P2)";
     const LINE_AND_POINT_JOIN_IN_A_PLANE: &str =
         "A line and a point join in a plane ((P0 V P1) V P2)";
-    const THREE_PLANES_MEET_IN_A_POINT: &str =
-        "Three planes meet in a point ((P0 V P1 V P2) ^ (P3 V P4 V P5) ^ (P6 V P7 V P8))";
+    const THREE_PLANES_MEET_IN_A_POINT: &str = "Three planes meet in a point ((p1 ^ p2 ^ p3)";
     const YELLOW: LinearRgba = LinearRgba::rgb(1.0, 1.0, 0.0);
     const RED: LinearRgba = LinearRgba::rgb(1.0, 0.0, 0.0);
     const GREEN: LinearRgba = LinearRgba::rgb(0.0, 1.0, 0.0);
@@ -250,7 +249,7 @@ impl PGAVisualizationApp {
         app.add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "PGA Geometric Algebra Visualization".to_string(),
-                resolution: (1280.0, 720.0).into(),
+                resolution: (1280.0, 900.0).into(),
                 ..default()
             }),
             ..default()
@@ -743,12 +742,10 @@ fn coordinate_editor_ui(
         let scene = scenes.current_mut();
         egui::Window::new("Point Coordinates")
             .default_open(true)
-            .resizable(true)
-            .default_pos([10.0, 10.0])
+            .resizable(false)
+            .default_pos([0.0, 0.0])
+            .max_width(200.0)
             .show(ctx, |ui| {
-                ui.heading("Edit Point Coordinates");
-                ui.separator();
-
                 let mut points_changed = false;
 
                 // Create a list of points with editable coordinates
