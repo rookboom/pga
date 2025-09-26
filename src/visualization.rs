@@ -272,6 +272,7 @@ impl PGAVisualizationApp {
         .add_event::<PointsChangedEvent>()
         .init_gizmo_group::<PGAGizmos>()
         .insert_resource(SceneLibrary::new())
+        .insert_resource(ClearColor(Color::srgb(0.05, 0.05, 0.08))) // Very dark blue-gray
         .add_systems(Startup, (setup_scene, setup_ui))
         .add_systems(Update, draw_pga_gizmos)
         .add_systems(Update, spawn_plane_meshes)
@@ -297,7 +298,7 @@ fn setup_scene(mut commands: Commands) {
         .spawn(Camera3d::default())
         .insert(OrbitCameraBundle::new(
             OrbitCameraController::default(),
-            Vec3::new(3.0, 3.0, 3.0),
+            Vec3::new(5.0, 5.0, 5.0),
             Vec3::new(0., 0., 0.),
             Vec3::Y,
         ));
@@ -408,7 +409,10 @@ fn draw_pga_gizmos(mut gizmos: Gizmos<PGAGizmos>, scenes: Res<SceneLibrary>) {
         draw_pga_line(&mut gizmos, line, *color);
     }
 
-    // Note: Planes are now drawn as meshes in the spawn_plane_meshes system
+    // Draw plane normal arrows (planes themselves are drawn as meshes)
+    for (plane, color) in &scene.planes {
+        draw_plane_normal_arrow(&mut gizmos, plane, *color);
+    }
 }
 
 /// Convert a PGA Point to a Bevy Vec3
@@ -596,6 +600,32 @@ fn draw_pga_plane(gizmos: &mut Gizmos<PGAGizmos>, plane: &Plane, color: LinearRg
     gizmos.arrow(point_on_plane, point_on_plane + normal * 1.0, color);
 }
 
+/// Draw just the normal arrow for a PGA plane (used when plane is drawn as mesh)
+fn draw_plane_normal_arrow(gizmos: &mut Gizmos<PGAGizmos>, plane: &Plane, color: LinearRgba) {
+    let pga = &plane.0;
+
+    // Extract plane equation coefficients: ax + by + cz + d = 0
+    let a = pga.mvec[2]; // e1
+    let b = pga.mvec[3]; // e2
+    let c = pga.mvec[4]; // e3
+    let d = pga.mvec[1]; // e0
+
+    let normal = Vec3::new(a, b, c);
+
+    if normal.length() < f32::EPSILON {
+        return; // Invalid plane
+    }
+
+    let normal = normal.normalize();
+
+    // Find a point on the plane
+    let distance = -d / Vec3::new(a, b, c).length();
+    let point_on_plane = normal * distance;
+
+    // Draw normal vector arrow
+    gizmos.arrow(point_on_plane, point_on_plane + normal * 1.0, color);
+}
+
 /// System to spawn plane meshes
 fn spawn_plane_meshes(
     mut commands: Commands,
@@ -671,9 +701,9 @@ fn create_plane_mesh(plane: &Plane) -> Option<(Mesh, Transform)> {
     let size = 3.0;
     let positions = vec![
         (point_on_plane + u * -size + v * -size).to_array(), // Bottom-left
-        (point_on_plane + u *  size + v * -size).to_array(), // Bottom-right
-        (point_on_plane + u *  size + v *  size).to_array(), // Top-right
-        (point_on_plane + u * -size + v *  size).to_array(), // Top-left
+        (point_on_plane + u * size + v * -size).to_array(),  // Bottom-right
+        (point_on_plane + u * size + v * size).to_array(),   // Top-right
+        (point_on_plane + u * -size + v * size).to_array(),  // Top-left
     ];
 
     let normals = vec![
@@ -683,19 +713,17 @@ fn create_plane_mesh(plane: &Plane) -> Option<(Mesh, Transform)> {
         normal.to_array(),
     ];
 
-    let uvs = vec![
-        [0.0, 0.0],
-        [1.0, 0.0],
-        [1.0, 1.0],
-        [0.0, 1.0],
-    ];
+    let uvs = vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
 
     let indices = vec![
         0, 1, 2, // First triangle
         2, 3, 0, // Second triangle
     ];
 
-    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
