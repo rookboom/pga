@@ -7,6 +7,10 @@ use bevy::{
     gizmos::config::GizmoConfigGroup,
     input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel},
     prelude::*,
+    render::{
+        mesh::{Indices, PrimitiveTopology},
+        render_asset::RenderAssetUsages,
+    },
 };
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui};
 use smooth_bevy_cameras::{
@@ -79,6 +83,12 @@ impl SceneLibrary {
 /// Component to mark the scene name text UI element
 #[derive(Component)]
 struct SceneNameText;
+
+/// Component to mark plane mesh entities
+#[derive(Component)]
+struct PlaneMesh {
+    plane_index: usize,
+}
 
 #[derive(Component)]
 struct Label((usize, GeometricObject));
@@ -264,6 +274,7 @@ impl PGAVisualizationApp {
         .insert_resource(SceneLibrary::new())
         .add_systems(Startup, (setup_scene, setup_ui))
         .add_systems(Update, draw_pga_gizmos)
+        .add_systems(Update, spawn_plane_meshes)
         .add_systems(Update, input_map)
         .add_systems(Update, scene_selection_input)
         .add_systems(Update, update_scene_ui)
@@ -397,10 +408,7 @@ fn draw_pga_gizmos(mut gizmos: Gizmos<PGAGizmos>, scenes: Res<SceneLibrary>) {
         draw_pga_line(&mut gizmos, line, *color);
     }
 
-    // Draw planes as grids
-    for (plane, color) in &scene.planes {
-        draw_pga_plane(&mut gizmos, plane, *color);
-    }
+    // Note: Planes are now drawn as meshes in the spawn_plane_meshes system
 }
 
 /// Convert a PGA Point to a Bevy Vec3
@@ -586,6 +594,114 @@ fn draw_pga_plane(gizmos: &mut Gizmos<PGAGizmos>, plane: &Plane, color: LinearRg
 
     // Draw normal vector
     gizmos.arrow(point_on_plane, point_on_plane + normal * 1.0, color);
+}
+
+/// System to spawn plane meshes
+fn spawn_plane_meshes(
+    mut commands: Commands,
+    scenes: Res<SceneLibrary>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    existing_planes: Query<Entity, With<PlaneMesh>>,
+) {
+    if !scenes.is_changed() {
+        return;
+    }
+
+    // Remove existing plane meshes
+    for entity in existing_planes.iter() {
+        commands.entity(entity).despawn();
+    }
+
+    let scene = scenes.current();
+
+    // Create meshes for each plane
+    for (index, (plane, color)) in scene.planes.iter().enumerate() {
+        if let Some((mesh, transform)) = create_plane_mesh(plane) {
+            let material = materials.add(StandardMaterial {
+                base_color: Color::LinearRgba(*color).with_alpha(0.3),
+                alpha_mode: AlphaMode::Blend,
+                cull_mode: None, // Render both sides
+                ..default()
+            });
+
+            commands.spawn((
+                Mesh3d(meshes.add(mesh)),
+                MeshMaterial3d(material),
+                transform,
+                PlaneMesh { plane_index: index },
+            ));
+        }
+    }
+}
+
+/// Create a mesh and transform for a PGA plane
+fn create_plane_mesh(plane: &Plane) -> Option<(Mesh, Transform)> {
+    let pga = &plane.0;
+
+    // Extract plane equation coefficients: ax + by + cz + d = 0
+    let a = pga.mvec[2]; // e1
+    let b = pga.mvec[3]; // e2
+    let c = pga.mvec[4]; // e3
+    let d = pga.mvec[1]; // e0
+
+    let normal = Vec3::new(a, b, c);
+
+    if normal.length() < f32::EPSILON {
+        return None; // Invalid plane
+    }
+
+    let normal = normal.normalize();
+
+    // Find a point on the plane
+    let distance = -d / Vec3::new(a, b, c).length();
+    let point_on_plane = normal * distance;
+
+    // Create two orthogonal vectors in the plane
+    let up = if normal.abs().dot(Vec3::Y) < 0.9 {
+        Vec3::Y
+    } else {
+        Vec3::X
+    };
+
+    let u = normal.cross(up).normalize();
+    let v = normal.cross(u).normalize();
+
+    // Create a quad mesh
+    let size = 3.0;
+    let positions = vec![
+        (point_on_plane + u * -size + v * -size).to_array(), // Bottom-left
+        (point_on_plane + u *  size + v * -size).to_array(), // Bottom-right
+        (point_on_plane + u *  size + v *  size).to_array(), // Top-right
+        (point_on_plane + u * -size + v *  size).to_array(), // Top-left
+    ];
+
+    let normals = vec![
+        normal.to_array(),
+        normal.to_array(),
+        normal.to_array(),
+        normal.to_array(),
+    ];
+
+    let uvs = vec![
+        [0.0, 0.0],
+        [1.0, 0.0],
+        [1.0, 1.0],
+        [0.0, 1.0],
+    ];
+
+    let indices = vec![
+        0, 1, 2, // First triangle
+        2, 3, 0, // Second triangle
+    ];
+
+    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    mesh.insert_indices(Indices::U32(indices));
+
+    Some((mesh, Transform::IDENTITY))
 }
 
 pub fn input_map(
