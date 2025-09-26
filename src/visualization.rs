@@ -114,11 +114,10 @@ impl Default for PGAScene {
 
 impl PGAScene {
     const EMPTY_SCENE: &str = "Empty Scene";
-    const TWO_POINTS_JOIN_IN_A_LINE: &str = "Two points join in a line (P0 V P1)";
-    const THREE_POINTS_JOIN_IN_A_PLANE: &str = "Three points join in a plane (P0 V P1 V P2)";
-    const LINE_AND_POINT_JOIN_IN_A_PLANE: &str =
-        "A line and a point join in a plane ((P0 V P1) V P2)";
-    const THREE_PLANES_MEET_IN_A_POINT: &str = "Three planes meet in a point ((p1 ^ p2 ^ p3)";
+    const TWO_POINTS_JOIN_IN_A_LINE: &str = "Two points join in a line: L1 = P0 V P1";
+    const THREE_POINTS_JOIN_IN_A_PLANE: &str = "Three points join in a plane: P0 = P0 V P1 V P2";
+    const LINE_AND_POINT_JOIN_IN_A_PLANE: &str = "A line and a point join in a plane: P0 = L0 V P2";
+    const THREE_PLANES_MEET_IN_A_POINT: &str = "Three planes meet in a point: P9 = P1 ^ P2 ^ P3";
     const YELLOW: LinearRgba = LinearRgba::rgb(1.0, 1.0, 0.0);
     const RED: LinearRgba = LinearRgba::rgb(1.0, 0.0, 0.0);
     const GREEN: LinearRgba = LinearRgba::rgb(0.0, 1.0, 0.0);
