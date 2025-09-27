@@ -11,7 +11,6 @@ use bevy::{
         mesh::{Indices, PrimitiveTopology},
         render_asset::RenderAssetUsages,
     },
-    scene,
 };
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui};
 use smooth_bevy_cameras::{
@@ -27,28 +26,31 @@ use crate::{Direction, Line, Plane, Point};
 #[derive(Default, Reflect, GizmoConfigGroup)]
 pub struct PGAGizmos;
 
-#[derive(Resource)]
-pub struct SceneSelector {
+#[derive(Default, Resource)]
+pub struct ObjectPool {
     pub points: Vec<Entity>,
     pub lines: Vec<Entity>,
     pub planes: Vec<Entity>,
     pub directions: Vec<Entity>,
-    pub scene_names: Vec<&'static str>,
+}
+
+#[derive(Default, Resource)]
+pub struct SceneSelector {
+    pub scenes: Vec<PGAScene>,
     current_scene_index: usize,
 }
 
-enum PGAObject {
-    Point(Point),
-    Line(Line),
-    Plane(Plane),
-    Direction(Direction),
-}
-
-struct PGAScene {
-    pub point_indices: Vec<(usize, Origin)>,
-    pub line_indices: Vec<(usize, Origin)>,
-    pub plane_indices: Vec<(usize, Origin)>,
-    pub direction_indices: Vec<(usize, Origin)>,
+#[derive(Default)]
+pub struct PGAScene {
+    pub name: &'static str,
+    pub points: Vec<Point>,
+    pub lines: Vec<Line>,
+    pub planes: Vec<Plane>,
+    pub directions: Vec<Direction>,
+    pub input_point_count: usize,
+    pub input_line_count: usize,
+    pub input_plane_count: usize,
+    pub input_direction_count: usize,
 }
 
 #[derive(Default, Resource)]
@@ -67,7 +69,7 @@ pub struct SceneMaterials {
 pub struct SceneChangedEvent;
 
 #[derive(Event)]
-pub struct PointsChangedEvent;
+pub struct InputChangedEvent;
 
 impl SceneMaterials {
     fn find(&self, color: SceneColor) -> Handle<StandardMaterial> {
@@ -84,38 +86,27 @@ impl SceneMaterials {
     }
 }
 impl SceneSelector {
-    pub fn new() -> Self {
-        let scene_names = vec![
-            PGAScene::EMPTY_SCENE,
-            PGAScene::TWO_POINTS_JOIN_IN_A_LINE,
-            PGAScene::THREE_POINTS_JOIN_IN_A_PLANE,
-            PGAScene::LINE_AND_POINT_JOIN_IN_A_PLANE,
-            PGAScene::THREE_PLANES_MEET_IN_A_POINT,
-        ];
-        Self {
-            scene_names,
-            current_scene_index: 0,
-        }
+    pub fn current(&self) -> &PGAScene {
+        &self.scenes[self.current_scene_index]
     }
-
-    pub fn current(&self) -> &str {
-        self.scene_names[self.current_scene_index]
+    pub fn current_mut(&mut self) -> &mut PGAScene {
+        &mut self.scenes[self.current_scene_index]
     }
 
     pub fn next_scene(&mut self) {
-        self.current_scene_index = (self.current_scene_index + 1) % self.scene_names.len();
+        self.current_scene_index = (self.current_scene_index + 1) % self.len();
     }
 
     pub fn prev_scene(&mut self) {
         if self.current_scene_index == 0 {
-            self.current_scene_index = self.scene_names.len() - 1;
+            self.current_scene_index = self.len() - 1;
         } else {
             self.current_scene_index -= 1;
         }
     }
 
     pub fn len(&self) -> usize {
-        self.scene_names.len()
+        self.scenes.len()
     }
 }
 
@@ -165,28 +156,6 @@ enum Origin {
     Input,
 }
 
-/// Resource containing PGA objects to visualize
-#[derive(Clone)]
-pub struct PGAScene {
-    pub name: &'static str,
-    pub points: Vec<(Point, LinearRgba)>,
-    pub planes: Vec<(Plane, LinearRgba)>,
-    pub lines: Vec<(Line, LinearRgba)>,
-    pub directions: Vec<(Direction, LinearRgba)>,
-}
-
-impl Default for PGAScene {
-    fn default() -> Self {
-        Self {
-            name: Self::EMPTY_SCENE,
-            points: Vec::new(),
-            planes: Vec::new(),
-            lines: Vec::new(),
-            directions: Vec::new(),
-        }
-    }
-}
-
 impl SceneColor {
     pub fn linear_rgba(&self) -> LinearRgba {
         match self {
@@ -222,223 +191,179 @@ fn spawn_label(commands: &mut Commands, text: String, color: SceneColor) -> Enti
                 ..default()
             },
             ZIndex(1000),
-            Visibility::Visible,
+            Visibility::Hidden,
             Label,
         ))
         .id()
 }
 
-fn spawn_point<'a>(
-    commands: &'a mut Commands,
-    color: SceneColor,
-    point: Point,
-    index: usize,
-) -> EntityCommands<'a> {
-    let label = spawn_label(commands, format!("P{}", index), color);
-
-    commands.spawn((PointVisual(point), color, LinkedLabel(label)))
+fn spawn_object(commands: &mut Commands, color: SceneColor, text: String) -> Entity {
+    let label = spawn_label(commands, text, color);
+    commands
+        .spawn((color, LinkedLabel(label), Visibility::Hidden))
+        .id()
 }
 
-fn spawn_line<'a>(
-    commands: &'a mut Commands,
-    color: SceneColor,
-    line: Line,
-    index: usize,
-) -> EntityCommands<'a> {
-    let label = spawn_label(commands, format!("L{}", index), color);
-    commands.spawn((LineVisual(line), color, LinkedLabel(label)))
+fn plane_transform(plane: &Plane) -> Transform {
+    let dir = Vec3::new(plane.0.mvec[2], plane.0.mvec[3], plane.0.mvec[4]);
+    let distance = plane.0.mvec[1] / dir.length();
+    let normal = dir.normalize();
+    info!("Plane normal: {:?}", normal);
+    info!("Plane dir: {:?}", dir);
+    let rotation = Quat::from_rotation_arc(Vec3::Y, normal);
+    Transform {
+        translation: -normal * distance,
+        rotation,
+        ..Default::default()
+    }
 }
-
-fn spawn_input_points(commands: &mut Commands, points: &[&Point]) -> Vec<Entity> {
-    points
-        .iter()
-        .enumerate()
-        .map(|(i, &point)| {
-            spawn_point(commands, SceneColor::WHITE, point.clone(), i)
-                .insert(Origin::Input)
-                .id()
-        })
-        .collect()
-}
-
-fn spawn_plane<'a>(
-    commands: &'a mut Commands,
+fn spawn_plane(
+    commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
-    scene_materials: &Res<SceneMaterials>,
+    scene_materials: &SceneMaterials,
     color: SceneColor,
     plane: Plane,
     index: usize,
-) -> EntityCommands<'a> {
+) -> Entity {
     let mesh = Plane3d::new(Vec3::Y, Vec2::splat(3.0));
     let material = scene_materials.find(color);
     let label = spawn_label(commands, format!("p{}", index), color);
-    let rotation = Quat::from_rotation_arc(Vec3::Y, plane.normal());
-    let transform = Transform {
-        translation: -plane.normal() * plane.distance(),
-        rotation,
-        ..Default::default()
-    };
-    commands.spawn((
-        Mesh3d(meshes.add(mesh)),
-        MeshMaterial3d(material),
-        transform,
-        PlaneVisual(plane),
-        color,
-        LinkedLabel(label),
-    ))
+    commands
+        .spawn((
+            Mesh3d(meshes.add(mesh)),
+            MeshMaterial3d(material),
+            plane_transform(&plane),
+            color,
+            LinkedLabel(label),
+            Visibility::Hidden,
+        ))
+        .id()
 }
 
-fn update_scene(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut scene_materials: Res<SceneMaterials>,
-    visual_objects: Query<(Entity, &LinkedLabel, &Origin)>,
+fn update_plane_transforms(
     scene_selector: Res<SceneSelector>,
-    mut scene_inputs: ResMut<SceneInputs>,
-    mut on_points_changed: EventReader<PointsChangedEvent>,
-    point_visuals: Query<&PointVisual>,
-    line_visuals: Query<&LineVisual>,
-    plane_visuals: Query<&PlaneVisual>,
-    direction_visuals: Query<&DirectionVisual>,
+    object_pool: Res<ObjectPool>,
+    mut transforms: Query<&mut Transform>,
 ) {
-    let points_changed = on_points_changed.read().next().is_some();
-    if !points_changed {
-        return;
+    info!("Updating plane transforms...");
+    let scene = scene_selector.current();
+
+    for (plane, plane_entity) in scene.planes.iter().zip(object_pool.planes.iter()) {
+        if let Ok(mut transform) = transforms.get_mut(*plane_entity) {
+            *transform = plane_transform(plane);
+        }
     }
-
-    info!("Points changed, updating scene...");
-
-    let scene_name = scene_selector.scene_names[scene_selector.current_scene_index];
 }
 
-fn rebuild_scene(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut scene_materials: Res<SceneMaterials>,
-    visual_objects: Query<(Entity, &LinkedLabel)>,
-
-    scene_selector: Res<SceneSelector>,
-    mut scene_inputs: ResMut<SceneInputs>,
-    mut on_scene_changed: EventReader<SceneChangedEvent>,
-    mut notify_points_changed: EventWriter<PointsChangedEvent>,
+fn set_visibility<T>(
+    label_query: &mut Query<&mut Visibility, (With<Label>, Without<LinkedLabel>)>,
+    object_query: &mut Query<(&mut Visibility, &LinkedLabel)>,
+    entities: &Vec<Entity>,
+    objects: &Vec<T>,
 ) {
-    let scene_changed = on_scene_changed.read().next().is_some();
-    if !scene_changed {
-        return;
+    for (index, entity) in entities.iter().enumerate() {
+        let visibility = if index < objects.len() {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+
+        object_query
+            .get_mut(*entity)
+            .map(|(mut v, linked_label)| {
+                *v = visibility;
+                if let Ok(mut label_vis) = label_query.get_mut(linked_label.0) {
+                    *label_vis = visibility;
+                }
+            })
+            .ok();
     }
+}
 
-    info!("Scene changed, updating scene...");
+fn update_visibility(
+    mut label_query: Query<&mut Visibility, (With<Label>, Without<LinkedLabel>)>,
+    mut object_query: Query<(&mut Visibility, &LinkedLabel)>,
+    object_pool: ResMut<ObjectPool>,
+    scene_selector: ResMut<SceneSelector>,
+) {
+    let scene = scene_selector.current();
+    set_visibility(
+        &mut label_query,
+        &mut object_query,
+        &object_pool.points,
+        &scene.points,
+    );
 
-    for (entity, &LinkedLabel(label)) in visual_objects.iter() {
-        commands.entity(entity).despawn();
-        commands.entity(label).despawn();
-    }
+    set_visibility(
+        &mut label_query,
+        &mut object_query,
+        &object_pool.lines,
+        &scene.lines,
+    );
 
-    scene_inputs.entities.clear();
+    set_visibility(
+        &mut label_query,
+        &mut object_query,
+        &object_pool.planes,
+        &scene.planes,
+    );
 
-    let existing_meshes: Vec<AssetId<Mesh>> = meshes.iter().map(|(id, _)| id.clone()).collect();
-    for id in existing_meshes {
-        meshes.remove(id);
-    }
+    set_visibility(
+        &mut label_query,
+        &mut object_query,
+        &object_pool.directions,
+        &scene.directions,
+    );
+}
 
-    let scene_name = scene_selector.scene_names[scene_selector.current_scene_index];
+fn rebuild_scene(mut scene_selector: ResMut<SceneSelector>) {
+    info!("Input/Scene changed, rebuilding scene...");
 
-    let p0 = &Point::new(1.0, 0.0, 0.0);
-    let p1 = &Point::new(0.0, 1.0, 0.0);
-    let p2 = &Point::new(0.0, 0.0, 1.0);
+    let scene = scene_selector.current_mut();
 
-    match scene_name {
+    match scene.name {
         PGAScene::TWO_POINTS_JOIN_IN_A_LINE => {
-            spawn_input_points(&mut commands, &[p0, p1]);
-            if let Some(line) = (p0 & p1).value() {
-                spawn_line(&mut commands, SceneColor::ORANGE, line, 0);
+            let p0 = &scene.points[0];
+            let p1 = &scene.points[1];
+            // Output
+            let line = p0 & p1;
+            if let Some(line) = line.value() {
+                scene.lines[0] = line;
             }
         }
         PGAScene::THREE_POINTS_JOIN_IN_A_PLANE => {
-            spawn_input_points(&mut commands, &[p0, p1, p2]);
+            // Inputs
+            let p0 = &scene.points[0];
+            let p1 = &scene.points[1];
+            let p2 = &scene.points[2];
+            // Output
             if let Some(plane) = (p0 & p1 & p2).value() {
-                spawn_plane(
-                    &mut commands,
-                    &mut meshes,
-                    &mut scene_materials,
-                    SceneColor::ORANGE,
-                    plane,
-                    0,
-                );
+                scene.planes[0] = plane;
             }
         }
         PGAScene::LINE_AND_POINT_JOIN_IN_A_PLANE => {
-            spawn_input_points(&mut commands, &[p0, p1, p2]);
-            if let Some(line) = (p0 & p1).value() {
-                spawn_line(&mut commands, SceneColor::ORANGE, line.clone(), 0)
-                    .insert(Origin::Computed);
-                if let Some(plane) = (line & p2).value() {
-                    spawn_plane(
-                        &mut commands,
-                        &mut meshes,
-                        &mut scene_materials,
-                        SceneColor::ORANGE,
-                        plane,
-                        0,
-                    );
-                }
+            // Inputs
+            let line = &scene.lines[0];
+            let p0 = &scene.points[0];
+
+            // Output
+            if let Some(plane) = (line & p0).value() {
+                scene.planes[0] = plane;
             }
         }
         PGAScene::THREE_PLANES_MEET_IN_A_POINT => {
-            let p = &[
-                &Point::new(1.0, 1.0, 0.0),
-                &Point::new(1.0, 0.0, 2.0),
-                &Point::new(1.0, 2.0, 0.0),
-                &Point::new(0.0, 2.0, 1.0),
-                &Point::new(0.0, 2.0, 3.0),
-                &Point::new(3.0, 2.0, 0.0),
-                &Point::new(0.0, 1.0, 1.0),
-                &Point::new(0.0, 3.0, 1.0),
-                &Point::new(3.0, 0.0, 1.0),
-            ];
+            let plane0 = &scene.planes[0];
+            let plane1 = &scene.planes[1];
+            let plane2 = &scene.planes[2];
 
-            let plane0 = p[0] & p[1] & p[2];
-            let plane1 = p[3] & p[4] & p[5];
-            let plane2 = p[6] & p[7] & p[8];
-
-            if let Some(plane) = plane0.value() {
-                spawn_plane(
-                    &mut commands,
-                    &mut meshes,
-                    &mut scene_materials,
-                    SceneColor::MAGENTA,
-                    plane,
-                    0,
-                )
-                .insert(Origin::Input);
-            }
-            if let Some(plane) = plane1.value() {
-                spawn_plane(
-                    &mut commands,
-                    &mut meshes,
-                    &mut scene_materials,
-                    SceneColor::ORANGE,
-                    plane,
-                    1,
-                )
-                .insert(Origin::Input);
-            }
-            if let Some(plane) = plane2.value() {
-                spawn_plane(
-                    &mut commands,
-                    &mut meshes,
-                    &mut scene_materials,
-                    SceneColor::CYAN,
-                    plane,
-                    2,
-                )
-                .insert(Origin::Input);
+            // Output
+            let point = plane0 ^ plane1 ^ plane2;
+            if let Some(point) = point.value() {
+                scene.points[0] = point;
             }
         }
         _ => { /* Empty scene or unrecognized scene name */ }
     }
-
-    notify_points_changed.write(PointsChangedEvent);
 }
 
 /// Bevy app builder for PGA visualization
@@ -462,19 +387,24 @@ impl PGAVisualizationApp {
         })
         .add_plugins(EguiPlugin::default())
         .add_event::<SceneChangedEvent>()
-        .add_event::<PointsChangedEvent>()
+        .add_event::<InputChangedEvent>()
         .init_gizmo_group::<PGAGizmos>()
-        .insert_resource(SceneInputs::default())
-        .insert_resource(SceneSelector::new())
+        .insert_resource(ObjectPool::default())
+        .insert_resource(SceneSelector::default())
         .insert_resource(SceneMaterials::default())
         .insert_resource(ClearColor(Color::srgb(0.05, 0.05, 0.08))) // Very dark blue-gray
         .add_systems(Startup, (setup_scene, setup_ui))
-        .add_systems(Update, draw_pga_gizmos)
-        .add_systems(Update, input_map)
-        .add_systems(Update, scene_selection_input)
-        .add_systems(Update, update_scene_ui)
-        .add_systems(Update, rebuild_scene)
-        .add_systems(Update, update_scene)
+        .add_systems(Update, (draw_pga_gizmos, input_map, scene_selection_input))
+        .add_systems(
+            Update,
+            (update_scene_ui, update_visibility).run_if(on_event::<SceneChangedEvent>),
+        )
+        .add_systems(
+            Update,
+            (rebuild_scene, update_plane_transforms)
+                .chain()
+                .run_if(on_event::<InputChangedEvent>.or(on_event::<SceneChangedEvent>)),
+        )
         .add_systems(PostUpdate, update_label_positions)
         .add_systems(EguiPrimaryContextPass, coordinate_editor_ui);
 
@@ -492,6 +422,9 @@ fn setup_scene(
     mut commands: Commands,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut scene_materials: ResMut<SceneMaterials>,
+    mut scene_selector: ResMut<SceneSelector>,
+    mut object_pool: ResMut<ObjectPool>,
+    mut meshes: ResMut<Assets<Mesh>>,
 ) {
     let mut create_material = |color: SceneColor| {
         materials.add(StandardMaterial {
@@ -518,6 +451,101 @@ fn setup_scene(
             Vec3::new(0., 0., 0.),
             Vec3::Y,
         ));
+
+    let max_objects = 10;
+    object_pool.points = (0..max_objects)
+        .map(|i| spawn_object(&mut commands, SceneColor::WHITE, format!("P{}", i)))
+        .collect();
+
+    object_pool.lines = (0..max_objects)
+        .map(|i| spawn_object(&mut commands, SceneColor::YELLOW, format!("L{}", i)))
+        .collect();
+
+    object_pool.directions = (0..max_objects)
+        .map(|i| spawn_object(&mut commands, SceneColor::ORANGE, format!("D{}", i)))
+        .collect();
+
+    object_pool.planes = (0..max_objects)
+        .map(|i| {
+            let plane = Plane::new(1.0, 0.0, 0.0, 0.0);
+            spawn_plane(
+                &mut commands,
+                &mut meshes,
+                scene_materials.as_ref(),
+                SceneColor::CYAN,
+                plane,
+                i,
+            )
+        })
+        .collect();
+
+    let p0 = &Point::new(1.0, 0.0, 0.0);
+    let p1 = &Point::new(0.0, 1.0, 0.0);
+    let p2 = &Point::new(0.0, 0.0, 1.0);
+
+    let p = &[
+        &Point::new(1.0, 1.0, 0.0),
+        &Point::new(1.0, 0.0, 2.0),
+        &Point::new(1.0, 2.0, 0.0),
+        &Point::new(0.0, 2.0, 1.0),
+        &Point::new(0.0, 2.0, 3.0),
+        &Point::new(3.0, 2.0, 0.0),
+        &Point::new(0.0, 1.0, 1.0),
+        &Point::new(0.0, 3.0, 1.0),
+        &Point::new(3.0, 0.0, 1.0),
+    ];
+
+    let plane0 = (p[0] & p[1] & p[2]).value().unwrap();
+    let plane1 = (p[3] & p[4] & p[5]).value().unwrap();
+    let plane2 = (p[6] & p[7] & p[8]).value().unwrap();
+
+    scene_selector.scenes = vec![
+        PGAScene {
+            name: PGAScene::EMPTY_SCENE,
+            points: vec![],
+            lines: vec![],
+            planes: vec![],
+            directions: vec![],
+            ..default()
+        },
+        PGAScene {
+            name: PGAScene::TWO_POINTS_JOIN_IN_A_LINE,
+            points: vec![p0.clone(), p1.clone()],
+            lines: vec![Line::through_origin(1.0, 0.0, 0.0)],
+            planes: vec![],
+            directions: vec![],
+            input_point_count: 2,
+            ..default()
+        },
+        PGAScene {
+            name: PGAScene::THREE_POINTS_JOIN_IN_A_PLANE,
+            points: vec![p0.clone(), p1.clone(), p2.clone()],
+            lines: vec![],
+            planes: vec![Plane::new(1.0, 0.0, 0.0, 0.0)],
+            directions: vec![],
+            input_point_count: 3,
+            ..default()
+        },
+        PGAScene {
+            name: PGAScene::LINE_AND_POINT_JOIN_IN_A_PLANE,
+            points: vec![p0.clone()],
+            lines: vec![(p1 & p2).value().unwrap()],
+            planes: vec![Plane::new(1.0, 0.0, 0.0, 0.0)],
+            directions: vec![],
+            input_point_count: 1,
+            input_line_count: 1,
+            ..default()
+        },
+        PGAScene {
+            name: PGAScene::THREE_PLANES_MEET_IN_A_POINT,
+            points: vec![Point::new(0.0, 0.0, 0.0)],
+            lines: vec![],
+            planes: vec![plane0, plane1, plane2],
+            directions: vec![],
+            input_plane_count: 3,
+            ..default()
+        },
+    ];
 }
 
 /// Setup UI elements
@@ -541,15 +569,10 @@ fn setup_ui(mut commands: Commands, windows: Query<&Window>) {
 /// Update the scene name text when scene changes
 fn update_scene_ui(
     scene_selector: Res<SceneSelector>,
-    mut on_scene_changed: EventReader<SceneChangedEvent>,
     mut query: Query<&mut Text, With<SceneNameText>>,
 ) {
-    if on_scene_changed.read().next().is_none() {
-        return; // No scene change, no need to update UI
-    }
-
     for mut text in query.iter_mut() {
-        **text = scene_selector.current().to_string();
+        **text = scene_selector.current().name.to_string();
     }
 }
 
@@ -573,37 +596,38 @@ fn scene_selection_input(
 /// System to draw PGA objects using Bevy's gizmo API
 fn draw_pga_gizmos(
     mut gizmos: Gizmos<PGAGizmos>,
-    points: Query<(&PointVisual, &SceneColor)>,
-    lines: Query<(&LineVisual, &SceneColor)>,
-    directions: Query<(&DirectionVisual, &SceneColor)>,
-    planes: Query<(&PlaneVisual, &SceneColor)>,
+    scene_selector: Res<SceneSelector>,
+    // points: Query<(&PointVisual, &SceneColor)>,
+    // lines: Query<(&LineVisual, &SceneColor)>,
+    // directions: Query<(&DirectionVisual, &SceneColor)>,
+    // planes: Query<(&PlaneVisual, &SceneColor)>,
 ) {
+    let scene = scene_selector.current();
     // Draw coordinate axes
     gizmos.line(Vec3::ZERO, Vec3::X * 2.0, LinearRgba::RED);
     gizmos.line(Vec3::ZERO, Vec3::Y * 2.0, LinearRgba::GREEN);
     gizmos.line(Vec3::ZERO, Vec3::Z * 2.0, LinearRgba::BLUE);
 
     // Draw points as small spheres
-    for (point, color) in &points {
-        let pos = pga_point_to_vec3(&point.0);
-        gizmos.sphere(pos, 0.01, color.linear_rgba());
+    for point in &scene.points {
+        let pos = pga_point_to_vec3(point);
+        gizmos.sphere(pos, 0.01, SceneColor::WHITE.linear_rgba());
     }
 
     // Draw directions as arrows from origin
-    for (direction, color) in &directions {
-        let dir = pga_direction_to_vec3(&direction.0);
-        gizmos.arrow(Vec3::ZERO, dir * 2.0, color.linear_rgba());
+    for direction in &scene.directions {
+        let dir = pga_direction_to_vec3(direction);
+        gizmos.arrow(Vec3::ZERO, dir * 2.0, SceneColor::ORANGE.linear_rgba());
     }
 
     // Draw lines
-    for (line, color) in &lines {
-        draw_pga_line(&mut gizmos, &line.0, color.linear_rgba());
+    for line in &scene.lines {
+        draw_pga_line(&mut gizmos, line, SceneColor::YELLOW.linear_rgba());
     }
 
     // Draw plane normal arrows (planes themselves are drawn as meshes)
-    for (plane, color) in &planes {
-        info!("Drawing plane normal for plane: {:?}", plane.0);
-        draw_plane_normal_arrow(&mut gizmos, &plane.0, color.linear_rgba());
+    for plane in &scene.planes {
+        draw_plane_normal_arrow(&mut gizmos, plane, SceneColor::CYAN.linear_rgba());
     }
 }
 
@@ -885,12 +909,11 @@ pub fn input_map(
 
 fn update_label_positions(
     camera_query: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
-    mut labels: Query<&mut Node>,
-    mut points: Query<(&PointVisual, &LinkedLabel)>,
-    mut lines: Query<(&LineVisual, &LinkedLabel)>,
-    mut planes: Query<(&PlaneVisual, &LinkedLabel)>,
-    mut directions: Query<(&DirectionVisual, &LinkedLabel)>,
+    scene_selector: Res<SceneSelector>,
+    object_pool: Res<ObjectPool>,
     windows: Query<&Window>,
+    mut labels: Query<&mut Node>,
+    mut object_query: Query<(&mut Visibility, &LinkedLabel)>,
 ) {
     let Ok((camera, camera_global_transform)) = camera_query.single() else {
         return;
@@ -900,7 +923,14 @@ fn update_label_positions(
         return;
     };
 
-    let mut update_position = |label_entity, world_position| {
+    let scene = scene_selector.current();
+
+    let mut update_position = |obj_entity, world_position| {
+        let label_entity = if let Ok((_, linked_label)) = object_query.get_mut(obj_entity) {
+            linked_label.0
+        } else {
+            return;
+        };
         if let Ok(mut node) = labels.get_mut(label_entity) {
             if let Ok(viewport_position) =
                 camera.world_to_viewport(camera_global_transform, world_position)
@@ -914,29 +944,72 @@ fn update_label_positions(
         }
     };
 
-    for (point, label) in points.iter_mut() {
-        update_position(label.0, pga_point_to_vec3(&point.0));
+    for (point, obj_entity) in scene.points.iter().zip(object_pool.points.iter()) {
+        update_position(*obj_entity, pga_point_to_vec3(point));
     }
 
-    for (line, label) in lines.iter_mut() {
-        update_position(label.0, pga_point_on_line(&line.0));
+    for (line, obj_entity) in scene.lines.iter().zip(object_pool.lines.iter()) {
+        update_position(*obj_entity, pga_point_on_line(line));
     }
 
-    for (plane, label) in planes.iter_mut() {
-        update_position(label.0, pga_point_on_plane(&plane.0));
+    for (plane, obj_entity) in scene.planes.iter().zip(object_pool.planes.iter()) {
+        update_position(*obj_entity, pga_point_on_plane(plane));
     }
 
-    for (direction, label) in directions.iter_mut() {
-        update_position(label.0, pga_direction_to_vec3(&direction.0));
+    for (direction, obj_entity) in scene.directions.iter().zip(object_pool.directions.iter()) {
+        update_position(*obj_entity, pga_direction_to_vec3(direction));
     }
 }
 
 /// System to display coordinate editor UI for points
 fn coordinate_editor_ui(
     mut contexts: EguiContexts,
-    mut points: Query<&mut PointVisual>,
-    mut notify_points_changed: EventWriter<PointsChangedEvent>,
+    mut scene_selector: ResMut<SceneSelector>,
+    mut notify_input_changed: EventWriter<InputChangedEvent>,
 ) {
+    let scene = scene_selector.current_mut();
+
+    let edit_value = |label, ui: &mut egui::Ui, value: &mut f32| {
+        ui.label(label);
+        ui.add(egui::DragValue::new(value).speed(0.1).range(-10.0..=10.0))
+            .changed()
+    };
+
+    let edit_vec3 = |label, ui: &mut egui::Ui, value: &mut Vec3, index| {
+        let mut points_changed = false;
+        ui.group(|ui| {
+            ui.horizontal(|ui| {
+                ui.label(format!("{label}{index}:"));
+            });
+
+            ui.horizontal(|ui| {
+                points_changed = edit_value("X:", ui, &mut value.x)
+                    | edit_value("Y:", ui, &mut value.y)
+                    | edit_value("Z:", ui, &mut value.z)
+            })
+        });
+        ui.separator();
+        points_changed
+    };
+
+    let edit_plane = |label, ui: &mut egui::Ui, value: &mut Vec4, index| {
+        let mut points_changed = false;
+        ui.group(|ui| {
+            ui.horizontal(|ui| {
+                ui.label(format!("{label}{index}:"));
+            });
+
+            ui.horizontal(|ui| {
+                points_changed = edit_value("e0:", ui, &mut value.w)
+                    | edit_value("e1:", ui, &mut value.x)
+                    | edit_value("e2:", ui, &mut value.y)
+                    | edit_value("e3:", ui, &mut value.z)
+            })
+        });
+        ui.separator();
+        points_changed
+    };
+
     // Get the primary window context
     if let Ok(ctx) = contexts.ctx_mut() {
         egui::Window::new("Point Coordinates")
@@ -947,55 +1020,55 @@ fn coordinate_editor_ui(
             .show(ctx, |ui| {
                 let mut points_changed = false;
 
-                // Create a list of points with editable coordinates
-                for (index, mut point) in points.iter_mut().enumerate() {
-                    ui.group(|ui| {
-                        ui.horizontal(|ui| {
-                            ui.label(format!("P{}:", index));
-                        });
+                for i in 0..scene.input_point_count {
+                    if let Some(point) = scene.points.get_mut(i) {
+                        let mut vec = pga_point_to_vec3(point);
+                        points_changed |= edit_vec3("Point P", ui, &mut vec, i);
+                        if points_changed {
+                            *point = Point::new(vec[0], vec[1], vec[2]);
+                        }
+                    }
+                }
 
-                        ui.horizontal(|ui| {
-                            // Extract current coordinates
-                            let current_pos = pga_point_to_vec3(&point.0);
-                            let mut x = current_pos.x;
-                            let mut y = current_pos.y;
-                            let mut z = current_pos.z;
+                for i in 0..scene.input_direction_count {
+                    if let Some(direction) = scene.directions.get_mut(i) {
+                        let mut vec = pga_direction_to_vec3(direction);
+                        points_changed |= edit_vec3("Direction D", ui, &mut vec, i);
+                        if points_changed {
+                            *direction = Direction::new(vec[0], vec[1], vec[2]);
+                        }
+                    }
+                }
 
-                            ui.label("X:");
-                            if ui
-                                .add(egui::DragValue::new(&mut x).speed(0.1).range(-10.0..=10.0))
-                                .changed()
-                            {
-                                points_changed = true;
-                            }
+                for i in 0..scene.input_line_count {
+                    if let Some(line) = scene.lines.get_mut(i) {
+                        let mut dir = line.direction();
+                        let mut moment = line.moment();
+                        points_changed |= edit_vec3("Direction L", ui, &mut dir, i);
+                        points_changed |= edit_vec3("Moment L", ui, &mut moment, i);
+                        if points_changed {
+                            *line = line.with_direction(dir).with_moment(moment);
+                        }
+                    }
+                }
 
-                            ui.label("Y:");
-                            if ui
-                                .add(egui::DragValue::new(&mut y).speed(0.1).range(-10.0..=10.0))
-                                .changed()
-                            {
-                                points_changed = true;
-                            }
-
-                            ui.label("Z:");
-                            if ui
-                                .add(egui::DragValue::new(&mut z).speed(0.1).range(-10.0..=10.0))
-                                .changed()
-                            {
-                                points_changed = true;
-                            }
-
-                            // Update the point if any coordinate changed
-                            if points_changed {
-                                *point = PointVisual(Point::new(x, y, z));
-                            }
-                        });
-                    });
-                    ui.separator();
+                for i in 0..scene.input_plane_count {
+                    if let Some(plane) = scene.planes.get_mut(i) {
+                        let mut values = Vec4::new(
+                            plane.0.mvec[2], // e1
+                            plane.0.mvec[3], // e2
+                            plane.0.mvec[4], // e3
+                            plane.0.mvec[1], // e0
+                        );
+                        points_changed |= edit_plane("Plane p", ui, &mut values, i);
+                        if points_changed {
+                            *plane = Plane::new(values.x, values.y, values.z, values.w);
+                        }
+                    }
                 }
 
                 if points_changed {
-                    notify_points_changed.write(PointsChangedEvent);
+                    notify_input_changed.write(InputChangedEvent);
                 }
             });
     }

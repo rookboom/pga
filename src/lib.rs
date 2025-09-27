@@ -9,6 +9,7 @@ pub mod visualization;
 #[cfg(all(target_arch = "wasm32", feature = "web"))]
 mod web;
 
+use bevy::math::Vec3;
 #[cfg(all(target_arch = "wasm32", feature = "web"))]
 pub use web::*;
 
@@ -212,22 +213,30 @@ impl Line {
         Line::new(dir_x, dir_y, dir_z, 0.0, 0.0, 0.0)
     }
 
-    pub fn with_moment(&self, moment_x: f32, moment_y: f32, moment_z: f32) -> Self {
+    pub fn moment(&self) -> Vec3 {
+        Vec3::new(self.0.mvec[5], self.0.mvec[6], self.0.mvec[7])
+    }
+
+    pub fn direction(&self) -> Vec3 {
+        Vec3::new(self.0.mvec[8], self.0.mvec[9], self.0.mvec[10])
+    }
+
+    pub fn with_moment(&self, moment: Vec3) -> Self {
         Line::new(
             self.0.mvec[8],
             self.0.mvec[9],
             self.0.mvec[10],
-            moment_z,
-            moment_x,
-            moment_y,
+            moment.x,
+            moment.y,
+            moment.z,
         )
     }
 
-    pub fn with_direction(&self, dir_x: f32, dir_y: f32, dir_z: f32) -> Self {
+    pub fn with_direction(&self, dir: Vec3) -> Self {
         Line::new(
-            dir_x,
-            dir_y,
-            dir_z,
+            dir.x,
+            dir.y,
+            dir.z,
             self.0.mvec[5],
             self.0.mvec[6],
             self.0.mvec[7],
