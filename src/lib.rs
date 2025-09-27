@@ -9,7 +9,6 @@ pub mod visualization;
 #[cfg(all(target_arch = "wasm32", feature = "web"))]
 mod web;
 
-use bevy::math::Vec3;
 #[cfg(all(target_arch = "wasm32", feature = "web"))]
 pub use web::*;
 
@@ -181,66 +180,41 @@ impl Line {
     const X_AXIS: Line = Line(PGA3D::e23());
     const Y_AXIS: Line = Line(PGA3D::e31());
 
-    pub fn new(
-        dir_x: f32,
-        dir_y: f32,
-        dir_z: f32,
-        moment_x: f32,
-        moment_y: f32,
-        moment_z: f32,
-    ) -> Self {
-        let mut line = PGA3D::zero();
-        // pub const e01: PGA3D = PGA3D::new(1.0, 5);
-        // pub const e02: PGA3D = PGA3D::new(1.0, 6);
-        // pub const e03: PGA3D = PGA3D::new(1.0, 7);
-        // pub const e12: PGA3D = PGA3D::new(1.0, 8);
-        // pub const e31: PGA3D = PGA3D::new(1.0, 9);
-        // pub const e23: PGA3D = PGA3D::new(1.0, 10);
-        line.mvec[5] = moment_z; // e01 / z
-        line.mvec[6] = moment_x; // e02 / x
-        line.mvec[7] = moment_y; // e03 / y
-        line.mvec[8] = dir_z; // e12 / z
-        line.mvec[9] = dir_x; // e31 / x
-        line.mvec[10] = dir_y; // e23 / y
-        Line(line)
+    pub fn new() -> Self {
+        Line(PGA3D::zero())
     }
 
-    pub fn ideal(moment_x: f32, moment_y: f32, moment_z: f32) -> Self {
-        Line::new(0.0, 0.0, 0.0, moment_x, moment_y, moment_z)
+    pub fn ideal(x: f32, y: f32, z: f32) -> Self {
+        Line::new().with_moment(x, y, z)
     }
 
-    pub fn through_origin(dir_x: f32, dir_y: f32, dir_z: f32) -> Self {
-        Line::new(dir_x, dir_y, dir_z, 0.0, 0.0, 0.0)
+    pub fn through_origin(x: f32, y: f32, z: f32) -> Self {
+        Line::new().with_direction(x, y, z)
     }
 
-    pub fn moment(&self) -> Vec3 {
-        Vec3::new(self.0.mvec[5], self.0.mvec[6], self.0.mvec[7])
+    pub fn moment(&self) -> [f32; 3] {
+        [self.0.mvec[5], self.0.mvec[6], self.0.mvec[7]]
     }
 
-    pub fn direction(&self) -> Vec3 {
-        Vec3::new(self.0.mvec[8], self.0.mvec[9], self.0.mvec[10])
+    pub fn direction(&self) -> [f32; 3] {
+        [self.0.mvec[10], self.0.mvec[9], self.0.mvec[8]]
     }
 
-    pub fn with_moment(&self, moment: Vec3) -> Self {
-        Line::new(
-            self.0.mvec[8],
-            self.0.mvec[9],
-            self.0.mvec[10],
-            moment.x,
-            moment.y,
-            moment.z,
-        )
+    pub fn with_moment(&self, x: f32, y: f32, z: f32) -> Self {
+        let mut line = self.clone();
+        line.0.mvec[5] = x; // e01
+        line.0.mvec[6] = y; // e02
+        line.0.mvec[7] = z; // e03
+        line
     }
 
-    pub fn with_direction(&self, dir: Vec3) -> Self {
-        Line::new(
-            dir.x,
-            dir.y,
-            dir.z,
-            self.0.mvec[5],
-            self.0.mvec[6],
-            self.0.mvec[7],
-        )
+    pub fn with_direction(&self, x: f32, y: f32, z: f32) -> Self {
+        let mut line = self.clone();
+
+        line.0.mvec[10] = x; // e23
+        line.0.mvec[9] = y; // e31
+        line.0.mvec[8] = z; // e12
+        line
     }
 
     pub fn perpendicular_line(&self) -> Line {
@@ -316,9 +290,9 @@ mod tests {
     #[test]
     fn ideal_line_perpendicular_to_line() {
         let line = (Plane::new(0.0, 0.0, 1.0, 1.0) ^ Plane::UP).unwrap();
-        assert_eq!(Line::ideal(0.0, 0.0, 1.0), line.perpendicular_line());
+        assert_eq!(Line::ideal(1.0, 0.0, 0.0), line.perpendicular_line());
         let line = (Plane::FORWARD ^ Plane::UP).unwrap();
-        assert_eq!(Line::ideal(0.0, 0.0, 1.0), line.perpendicular_line());
+        assert_eq!(Line::ideal(1.0, 0.0, 0.0), line.perpendicular_line());
     }
 
     #[test]

@@ -173,10 +173,10 @@ impl SceneColor {
 
 impl PGAScene {
     const EMPTY_SCENE: &str = "Empty Scene";
-    const TWO_POINTS_JOIN_IN_A_LINE: &str = "Two points join in a line: L1 = P0 V P1";
-    const THREE_POINTS_JOIN_IN_A_PLANE: &str = "Three points join in a plane: P0 = P0 V P1 V P2";
-    const LINE_AND_POINT_JOIN_IN_A_PLANE: &str = "A line and a point join in a plane: P0 = L0 V P2";
-    const THREE_PLANES_MEET_IN_A_POINT: &str = "Three planes meet in a point: P9 = P1 ^ P2 ^ P3";
+    const TWO_POINTS_JOIN_IN_A_LINE: &str = "Two points join in a line: L0 = P0 V P1";
+    const THREE_POINTS_JOIN_IN_A_PLANE: &str = "Three points join in a plane: p0 = P0 V P1 V P2";
+    const LINE_AND_POINT_JOIN_IN_A_PLANE: &str = "A line and a point join in a plane: p0 = L0 V P0";
+    const THREE_PLANES_MEET_IN_A_POINT: &str = "Three planes meet in a point: P0 = p0 ^ p1 ^ p2";
 }
 
 fn spawn_label(commands: &mut Commands, text: String, color: SceneColor) -> Entity {
@@ -343,12 +343,16 @@ fn rebuild_scene(mut scene_selector: ResMut<SceneSelector>) {
         }
         PGAScene::LINE_AND_POINT_JOIN_IN_A_PLANE => {
             // Inputs
-            let line = &scene.lines[0];
             let p0 = &scene.points[0];
+            let p1 = &scene.points[1];
+            let p2 = &scene.points[2];
 
             // Output
-            if let Some(plane) = (line & p0).value() {
-                scene.planes[0] = plane;
+            if let Some(line) = (p1 & p2).value() {
+                scene.lines[0] = line.clone();
+                if let Some(plane) = (line & p0).value() {
+                    scene.planes[0] = plane;
+                }
             }
         }
         PGAScene::THREE_PLANES_MEET_IN_A_POINT => {
@@ -528,12 +532,11 @@ fn setup_scene(
         },
         PGAScene {
             name: PGAScene::LINE_AND_POINT_JOIN_IN_A_PLANE,
-            points: vec![p0.clone()],
+            points: vec![p0.clone(), p1.clone(), p2.clone()],
             lines: vec![(p1 & p2).value().unwrap()],
             planes: vec![Plane::new(1.0, 0.0, 0.0, 0.0)],
             directions: vec![],
-            input_point_count: 1,
-            input_line_count: 1,
+            input_point_count: 3,
             ..default()
         },
         PGAScene {
@@ -717,19 +720,12 @@ fn pga_direction_to_vec3(direction: &Direction) -> Vec3 {
 
 /// Draw a PGA line using gizmos
 fn draw_pga_line(gizmos: &mut Gizmos<PGAGizmos>, line: &Line, color: LinearRgba) {
-    let pga = &line.0;
-
     // Extract direction and moment components
-    let dir_x = pga.mvec[10]; // e31
-    let dir_y = pga.mvec[9]; // e23
-    let dir_z = pga.mvec[8]; // e12
+    let dir = line.direction();
+    let moment = line.moment();
 
-    let mom_x = pga.mvec[5]; // e02
-    let mom_y = pga.mvec[6]; // e03
-    let mom_z = pga.mvec[7]; // e01
-
-    let direction = Vec3::new(dir_x, dir_y, dir_z);
-    let moment = Vec3::new(mom_x, mom_y, mom_z);
+    let direction = Vec3::new(dir[0], dir[1], dir[2]);
+    let moment = Vec3::new(moment[0], moment[1], moment[2]);
 
     // If direction is zero, this is an ideal line (line at infinity)
     if direction.length() < f32::EPSILON {
@@ -1042,12 +1038,14 @@ fn coordinate_editor_ui(
 
                 for i in 0..scene.input_line_count {
                     if let Some(line) = scene.lines.get_mut(i) {
-                        let mut dir = line.direction();
-                        let mut moment = line.moment();
+                        let mut dir = Vec3::from(line.direction());
+                        let mut moment = Vec3::from(line.moment());
                         points_changed |= edit_vec3("Direction L", ui, &mut dir, i);
                         points_changed |= edit_vec3("Moment L", ui, &mut moment, i);
                         if points_changed {
-                            *line = line.with_direction(dir).with_moment(moment);
+                            *line = line
+                                .with_direction(dir.x, dir.y, dir.z)
+                                .with_moment(moment.x, moment.y, moment.z);
                         }
                     }
                 }
