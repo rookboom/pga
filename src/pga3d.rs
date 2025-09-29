@@ -14,6 +14,8 @@ type float_t = f32;
 
 use std::f32::consts::PI;
 
+use bevy::asset::io::memory::Dir;
+
 const basis: &'static [&'static str] = &[
     "1", "e0", "e1", "e2", "e3", "e01", "e02", "e03", "e12", "e31", "e23", "e021", "e013", "e032",
     "e123", "e0123",
@@ -957,6 +959,23 @@ define_binary_op_all!(
     BitAnd,
     bitand;
     self: Point, b: Point, Output = ZeroOr<Line>;
+    [val val] => &self & &b;
+    [ref val] =>  self & &b;
+    [val ref] => &self &  b;
+    [ref ref] => {
+        let obj = &self.0 & &b.0;
+        if obj.is_zero() {
+            ZeroOr(None)
+        } else {
+            ZeroOr(Some(Line(obj)))
+        }
+    };
+);
+
+define_binary_op_all!(
+    BitAnd,
+    bitand;
+    self: Point, b: Direction, Output = ZeroOr<Line>;
     [val val] => &self & &b;
     [ref val] =>  self & &b;
     [val ref] => &self &  b;

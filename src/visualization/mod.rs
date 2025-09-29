@@ -1,10 +1,4 @@
-//! PGA Visualization module
-//!
-//! This module provides 3D visualization capabilities for Projective Geometric Algebra objects
-//! using the Bevy game engine.
-
 use bevy::{
-    gizmos::config::GizmoConfigGroup,
     input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel},
     prelude::*,
     render::{
@@ -20,11 +14,10 @@ use smooth_bevy_cameras::{
     },
 };
 
-use crate::{Direction, Line, Plane, Point};
+mod scenes;
 
-/// Configuration for the PGA visualization
-#[derive(Default, Reflect, GizmoConfigGroup)]
-pub struct PGAGizmos;
+use crate::visualization::scenes::PGAScene;
+use crate::{Direction, Line, Plane, Point};
 
 #[derive(Default, Resource)]
 pub struct ObjectPool {
@@ -38,19 +31,6 @@ pub struct ObjectPool {
 pub struct SceneSelector {
     pub scenes: Vec<PGAScene>,
     current_scene_index: usize,
-}
-
-#[derive(Default)]
-pub struct PGAScene {
-    pub name: &'static str,
-    pub points: Vec<Point>,
-    pub lines: Vec<Line>,
-    pub planes: Vec<Plane>,
-    pub directions: Vec<Direction>,
-    pub input_point_count: usize,
-    pub input_line_count: usize,
-    pub input_plane_count: usize,
-    pub input_direction_count: usize,
 }
 
 #[derive(Default, Resource)]
@@ -70,45 +50,6 @@ pub struct SceneChangedEvent;
 
 #[derive(Event)]
 pub struct InputChangedEvent;
-
-impl SceneMaterials {
-    fn find(&self, color: SceneColor) -> Handle<StandardMaterial> {
-        match color {
-            SceneColor::YELLOW => self.yellow.clone(),
-            SceneColor::RED => self.red.clone(),
-            SceneColor::GREEN => self.green.clone(),
-            SceneColor::BLUE => self.blue.clone(),
-            SceneColor::MAGENTA => self.magenta.clone(),
-            SceneColor::CYAN => self.cyan.clone(),
-            SceneColor::ORANGE => self.orange.clone(),
-            SceneColor::WHITE => self.white.clone(),
-        }
-    }
-}
-impl SceneSelector {
-    pub fn current(&self) -> &PGAScene {
-        &self.scenes[self.current_scene_index]
-    }
-    pub fn current_mut(&mut self) -> &mut PGAScene {
-        &mut self.scenes[self.current_scene_index]
-    }
-
-    pub fn next_scene(&mut self) {
-        self.current_scene_index = (self.current_scene_index + 1) % self.len();
-    }
-
-    pub fn prev_scene(&mut self) {
-        if self.current_scene_index == 0 {
-            self.current_scene_index = self.len() - 1;
-        } else {
-            self.current_scene_index -= 1;
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        self.scenes.len()
-    }
-}
 
 /// Component to mark the scene name text UI element
 #[derive(Component)]
@@ -156,6 +97,45 @@ enum Origin {
     Input,
 }
 
+impl SceneMaterials {
+    fn find(&self, color: SceneColor) -> Handle<StandardMaterial> {
+        match color {
+            SceneColor::YELLOW => self.yellow.clone(),
+            SceneColor::RED => self.red.clone(),
+            SceneColor::GREEN => self.green.clone(),
+            SceneColor::BLUE => self.blue.clone(),
+            SceneColor::MAGENTA => self.magenta.clone(),
+            SceneColor::CYAN => self.cyan.clone(),
+            SceneColor::ORANGE => self.orange.clone(),
+            SceneColor::WHITE => self.white.clone(),
+        }
+    }
+}
+impl SceneSelector {
+    pub fn current(&self) -> &PGAScene {
+        &self.scenes[self.current_scene_index]
+    }
+    pub fn current_mut(&mut self) -> &mut PGAScene {
+        &mut self.scenes[self.current_scene_index]
+    }
+
+    pub fn next_scene(&mut self) {
+        self.current_scene_index = (self.current_scene_index + 1) % self.len();
+    }
+
+    pub fn prev_scene(&mut self) {
+        if self.current_scene_index == 0 {
+            self.current_scene_index = self.len() - 1;
+        } else {
+            self.current_scene_index -= 1;
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.scenes.len()
+    }
+}
+
 impl SceneColor {
     pub fn linear_rgba(&self) -> LinearRgba {
         match self {
@@ -169,14 +149,6 @@ impl SceneColor {
             SceneColor::WHITE => LinearRgba::rgb(1.0, 1.0, 1.0),
         }
     }
-}
-
-impl PGAScene {
-    const EMPTY_SCENE: &str = "Empty Scene";
-    const TWO_POINTS_JOIN_IN_A_LINE: &str = "Two points join in a line: L0 = P0 V P1";
-    const THREE_POINTS_JOIN_IN_A_PLANE: &str = "Three points join in a plane: p0 = P0 V P1 V P2";
-    const LINE_AND_POINT_JOIN_IN_A_PLANE: &str = "A line and a point join in a plane: p0 = L0 V P0";
-    const THREE_PLANES_MEET_IN_A_POINT: &str = "Three planes meet in a point: P0 = p0 ^ p1 ^ p2";
 }
 
 fn spawn_label(commands: &mut Commands, text: String, color: SceneColor) -> Entity {
@@ -316,60 +288,6 @@ fn update_visibility(
     );
 }
 
-fn rebuild_scene(mut scene_selector: ResMut<SceneSelector>) {
-    info!("Input/Scene changed, rebuilding scene...");
-
-    let scene = scene_selector.current_mut();
-
-    match scene.name {
-        PGAScene::TWO_POINTS_JOIN_IN_A_LINE => {
-            let p0 = &scene.points[0];
-            let p1 = &scene.points[1];
-            // Output
-            let line = p0 & p1;
-            if let Some(line) = line.value() {
-                scene.lines[0] = line;
-            }
-        }
-        PGAScene::THREE_POINTS_JOIN_IN_A_PLANE => {
-            // Inputs
-            let p0 = &scene.points[0];
-            let p1 = &scene.points[1];
-            let p2 = &scene.points[2];
-            // Output
-            if let Some(plane) = (p0 & p1 & p2).value() {
-                scene.planes[0] = plane;
-            }
-        }
-        PGAScene::LINE_AND_POINT_JOIN_IN_A_PLANE => {
-            // Inputs
-            let p0 = &scene.points[0];
-            let p1 = &scene.points[1];
-            let p2 = &scene.points[2];
-
-            // Output
-            if let Some(line) = (p1 & p2).value() {
-                scene.lines[0] = line.clone();
-                if let Some(plane) = (line & p0).value() {
-                    scene.planes[0] = plane;
-                }
-            }
-        }
-        PGAScene::THREE_PLANES_MEET_IN_A_POINT => {
-            let plane0 = &scene.planes[0];
-            let plane1 = &scene.planes[1];
-            let plane2 = &scene.planes[2];
-
-            // Output
-            let point = plane0 ^ plane1 ^ plane2;
-            if let Some(point) = point.value() {
-                scene.points[0] = point;
-            }
-        }
-        _ => { /* Empty scene or unrecognized scene name */ }
-    }
-}
-
 /// Bevy app builder for PGA visualization
 pub struct PGAVisualizationApp;
 
@@ -392,12 +310,11 @@ impl PGAVisualizationApp {
         .add_plugins(EguiPlugin::default())
         .add_event::<SceneChangedEvent>()
         .add_event::<InputChangedEvent>()
-        .init_gizmo_group::<PGAGizmos>()
         .insert_resource(ObjectPool::default())
         .insert_resource(SceneSelector::default())
         .insert_resource(SceneMaterials::default())
         .insert_resource(ClearColor(Color::srgb(0.05, 0.05, 0.08))) // Very dark blue-gray
-        .add_systems(Startup, (setup_scene, setup_ui))
+        .add_systems(Startup, (setup_scene, PGAScene::setup, setup_ui))
         .add_systems(Update, (draw_pga_gizmos, input_map, scene_selection_input))
         .add_systems(
             Update,
@@ -405,7 +322,7 @@ impl PGAVisualizationApp {
         )
         .add_systems(
             Update,
-            (rebuild_scene, update_plane_transforms)
+            (PGAScene::rebuild, update_plane_transforms)
                 .chain()
                 .run_if(on_event::<InputChangedEvent>.or(on_event::<SceneChangedEvent>)),
         )
@@ -426,7 +343,6 @@ fn setup_scene(
     mut commands: Commands,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut scene_materials: ResMut<SceneMaterials>,
-    mut scene_selector: ResMut<SceneSelector>,
     mut object_pool: ResMut<ObjectPool>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
@@ -482,73 +398,6 @@ fn setup_scene(
             )
         })
         .collect();
-
-    let p0 = &Point::new(1.0, 0.0, 0.0);
-    let p1 = &Point::new(0.0, 1.0, 0.0);
-    let p2 = &Point::new(0.0, 0.0, 1.0);
-
-    let p = &[
-        &Point::new(1.0, 1.0, 0.0),
-        &Point::new(1.0, 0.0, 2.0),
-        &Point::new(1.0, 2.0, 0.0),
-        &Point::new(0.0, 2.0, 1.0),
-        &Point::new(0.0, 2.0, 3.0),
-        &Point::new(3.0, 2.0, 0.0),
-        &Point::new(0.0, 1.0, 1.0),
-        &Point::new(0.0, 3.0, 1.0),
-        &Point::new(3.0, 0.0, 1.0),
-    ];
-
-    let plane0 = (p[0] & p[1] & p[2]).value().unwrap();
-    let plane1 = (p[3] & p[4] & p[5]).value().unwrap();
-    let plane2 = (p[6] & p[7] & p[8]).value().unwrap();
-
-    scene_selector.scenes = vec![
-        PGAScene {
-            name: PGAScene::EMPTY_SCENE,
-            points: vec![],
-            lines: vec![],
-            planes: vec![],
-            directions: vec![],
-            ..default()
-        },
-        PGAScene {
-            name: PGAScene::TWO_POINTS_JOIN_IN_A_LINE,
-            points: vec![p0.clone(), p1.clone()],
-            lines: vec![Line::through_origin(1.0, 0.0, 0.0)],
-            planes: vec![],
-            directions: vec![],
-            input_point_count: 2,
-            ..default()
-        },
-        PGAScene {
-            name: PGAScene::THREE_POINTS_JOIN_IN_A_PLANE,
-            points: vec![p0.clone(), p1.clone(), p2.clone()],
-            lines: vec![],
-            planes: vec![Plane::new(1.0, 0.0, 0.0, 0.0)],
-            directions: vec![],
-            input_point_count: 3,
-            ..default()
-        },
-        PGAScene {
-            name: PGAScene::LINE_AND_POINT_JOIN_IN_A_PLANE,
-            points: vec![p0.clone(), p1.clone(), p2.clone()],
-            lines: vec![(p1 & p2).value().unwrap()],
-            planes: vec![Plane::new(1.0, 0.0, 0.0, 0.0)],
-            directions: vec![],
-            input_point_count: 3,
-            ..default()
-        },
-        PGAScene {
-            name: PGAScene::THREE_PLANES_MEET_IN_A_POINT,
-            points: vec![Point::new(0.0, 0.0, 0.0)],
-            lines: vec![],
-            planes: vec![plane0, plane1, plane2],
-            directions: vec![],
-            input_plane_count: 3,
-            ..default()
-        },
-    ];
 }
 
 /// Setup UI elements
@@ -598,7 +447,7 @@ fn scene_selection_input(
 
 /// System to draw PGA objects using Bevy's gizmo API
 fn draw_pga_gizmos(
-    mut gizmos: Gizmos<PGAGizmos>,
+    mut gizmos: Gizmos,
     scene_selector: Res<SceneSelector>,
     // points: Query<(&PointVisual, &SceneColor)>,
     // lines: Query<(&LineVisual, &SceneColor)>,
@@ -719,7 +568,7 @@ fn pga_direction_to_vec3(direction: &Direction) -> Vec3 {
 }
 
 /// Draw a PGA line using gizmos
-fn draw_pga_line(gizmos: &mut Gizmos<PGAGizmos>, line: &Line, color: LinearRgba) {
+fn draw_pga_line(gizmos: &mut Gizmos, line: &Line, color: LinearRgba) {
     // Extract direction and moment components
     let dir = line.direction();
     let moment = line.moment();
@@ -756,7 +605,7 @@ fn draw_pga_line(gizmos: &mut Gizmos<PGAGizmos>, line: &Line, color: LinearRgba)
 }
 
 /// Draw just the normal arrow for a PGA plane (used when plane is drawn as mesh)
-fn draw_plane_normal_arrow(gizmos: &mut Gizmos<PGAGizmos>, plane: &Plane, color: LinearRgba) {
+fn draw_plane_normal_arrow(gizmos: &mut Gizmos, plane: &Plane, color: LinearRgba) {
     let pga = &plane.0;
 
     // Extract plane equation coefficients: ax + by + cz + d = 0
@@ -1036,19 +885,8 @@ fn coordinate_editor_ui(
                     }
                 }
 
-                for i in 0..scene.input_line_count {
-                    if let Some(line) = scene.lines.get_mut(i) {
-                        let mut dir = Vec3::from(line.direction());
-                        let mut moment = Vec3::from(line.moment());
-                        points_changed |= edit_vec3("Direction L", ui, &mut dir, i);
-                        points_changed |= edit_vec3("Moment L", ui, &mut moment, i);
-                        if points_changed {
-                            *line = line
-                                .with_direction(dir.x, dir.y, dir.z)
-                                .with_moment(moment.x, moment.y, moment.z);
-                        }
-                    }
-                }
+                // NOTE: We don't use lines as input since the moment and direction
+                // depend on each other. Construct a line with two points or a direction and a point instead.
 
                 for i in 0..scene.input_plane_count {
                     if let Some(plane) = scene.planes.get_mut(i) {
