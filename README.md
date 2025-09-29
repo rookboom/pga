@@ -28,4 +28,4 @@ This project is a stab at creating a type safe geometric algebra library. It all
    let point: PointOrDirection = plane ^ line
 ```
 
-See visualizations [here](https://rookboom.github.io/pga/).
+See more examples and visualizations [here](https://rookboom.github.io/pga/).
