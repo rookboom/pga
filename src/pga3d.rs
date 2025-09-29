@@ -14,8 +14,6 @@ type float_t = f32;
 
 use std::f32::consts::PI;
 
-use bevy::asset::io::memory::Dir;
-
 const basis: &'static [&'static str] = &[
     "1", "e0", "e1", "e2", "e3", "e01", "e02", "e03", "e12", "e31", "e23", "e021", "e013", "e032",
     "e123", "e0123",
