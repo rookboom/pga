@@ -857,7 +857,7 @@ fn coordinate_editor_ui(
 
     // Get the primary window context
     if let Ok(ctx) = contexts.ctx_mut() {
-        egui::Window::new("Point Coordinates")
+        egui::Window::new("Inputs")
             .default_open(true)
             .resizable(false)
             .default_pos([0.0, 0.0])
