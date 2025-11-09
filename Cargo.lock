@@ -3681,6 +3681,7 @@ dependencies = [
  "bevy",
  "bevy_egui",
  "console_error_panic_hook",
+ "glam",
  "smooth-bevy-cameras",
  "wasm-bindgen",
  "web-sys",

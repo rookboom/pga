@@ -1,5 +1,6 @@
+use crate::pgai::Direction;
 use crate::visualization::SceneSelector;
-use crate::{Direction, Line, Plane, Point};
+use crate::{Line, Plane, Point};
 use bevy::prelude::*;
 
 #[derive(Default)]
@@ -18,53 +19,52 @@ impl PGAScene {
     // Examples from: https://bivector.net/tools.html?p=3&q=0&r=1
     // Incidence
     pub const EMPTY_SCENE: &str = "Empty Scene";
-    pub const TWO_POINTS_JOIN_IN_A_LINE: &str = "Two points join in a line: L0 = P0 V P1";
+    pub const TWO_POINTS_JOIN_IN_A_LINE: &str = "Two points join in a line: L0 = P0 ^ P1";
     pub const DIRECTIONS_AND_POINTS_JOIN_IN_A_LINE: &str =
-        "A direction and a point join in a line: L0 = D0 V P0";
+        "A direction and a point join in a line: L0 = D0 ^ P0";
     pub const THREE_POINTS_JOIN_IN_A_PLANE: &str =
-        "Three points join in a plane: p0 = P0 V P1 V P2";
+        "Three points join in a plane: p0 = P0 ^ P1 ^ P2";
     pub const LINE_AND_POINT_JOIN_IN_A_PLANE: &str =
-        "A line and a point join in a plane: p0 = L0 V P0";
+        "A line and a point join in a plane: p0 = L0 ^ P0";
     pub const LINE_AND_PLANE_MEET_IN_A_POINT: &str =
-        "A line and a plane meet in a point: P2 = L0 ^ p0";
+        "A line and a plane meet in a point: P2 = L0 & p0";
     pub const THREE_PLANES_MEET_IN_A_POINT: &str =
-        "Three planes meet in a point: P0 = p0 ^ p1 ^ p2";
-    pub const TWO_PLANES_MEET_IN_A_LINE: &str = "Two planes meet in a line: L0 = p0 ^ p1";
+        "Three planes meet in a point: P0 = p0 & p1 & p2";
+    pub const TWO_PLANES_MEET_IN_A_LINE: &str = "Two planes meet in a line: L0 = p0 & p1";
 
     // Project & reject
     pub const PLANE_PERP_THROUGH_LINE: &str =
-        "The plane perpendicular to plane p0 through line L0: p1 = p0 | L0";
+        "The plane perpendicular to plane p0 through line L0: p1 = L0 ^ p0.weight.dual";
     pub const LINE_PERP_THROUGH_POINT: &str =
-        "The line perpendicular to plane p0 through point L0: p1 = P0 | p0";
+        "The line perpendicular to plane p0 through point P0: p1 = P0 ^ p0.weight.dual";
     pub const PLANE_PERP_THROUGH_POINT: &str =
-        "The plane perpendicular to line L0 through point P0: p0 = L0 | P0";
-    pub const PROJECT_PLANE_ONTO_POINT: &str =
-        "The projection of plane p0 onto point P0: p1 = (p0 | P0) * P0";
+        "The plane perpendicular to line L0 through point P0: p0 = P0 ^ L0.weight.dual";
+    pub const PROJECT_PLANE_ONTO_POINT: &str = "The projection of plane p0 onto point P0: L0 = p0.weight.dual; p1 = P0 ^ (P0 ^ L0).weight.dual";
     pub const PROJECT_POINT_ONTO_PLANE: &str =
-        "The projection of point P0 onto plane p0: P1 = (p0 | P0) * p0";
+        "The projection of point P0 onto plane p0: P1 = p0 & (P0 ^ p0.weight.dual)";
     pub const PROJECT_LINE_ONTO_PLANE: &str =
-        "The projection of line L0 onto plane p0: L1 = (p0 | L0) ^ p0";
+        "The projection of line L0 onto plane p0: p1 = L0 ^ p0.weight.dual; L1 = p0 & p1";
     /// Setup the initial scene with camera and lighting
     pub fn setup(mut scene_selector: ResMut<SceneSelector>) {
-        let p0 = &Point::new(1.0, 0.0, 0.0);
-        let p1 = &Point::new(0.0, 1.0, 0.0);
-        let p2 = &Point::new(0.0, 0.0, 1.0);
+        let p0 = Point::new(1.0, 0.0, 0.0);
+        let p1 = Point::new(0.0, 1.0, 0.0);
+        let p2 = Point::new(0.0, 0.0, 1.0);
 
-        let p = &[
-            &Point::new(1.0, 1.0, 0.0),
-            &Point::new(1.0, 0.0, 2.0),
-            &Point::new(1.0, 2.0, 0.0),
-            &Point::new(0.0, 2.0, 1.0),
-            &Point::new(0.0, 2.0, 3.0),
-            &Point::new(3.0, 2.0, 0.0),
-            &Point::new(0.0, 1.0, 1.0),
-            &Point::new(0.0, 3.0, 1.0),
-            &Point::new(3.0, 0.0, 1.0),
+        let p = [
+            Point::new(1.0, 1.0, 0.0),
+            Point::new(1.0, 0.0, 2.0),
+            Point::new(1.0, 2.0, 0.0),
+            Point::new(0.0, 2.0, 1.0),
+            Point::new(0.0, 2.0, 3.0),
+            Point::new(3.0, 2.0, 0.0),
+            Point::new(0.0, 1.0, 1.0),
+            Point::new(0.0, 3.0, 1.0),
+            Point::new(3.0, 0.0, 1.0),
         ];
 
-        let plane0 = (p[0] & p[1] & p[2]).value().unwrap();
-        let plane1 = (p[3] & p[4] & p[5]).value().unwrap();
-        let plane2 = (p[6] & p[7] & p[8]).value().unwrap();
+        let plane0 = p[0] ^ p[1] ^ p[2];
+        let plane1 = p[3] ^ p[4] ^ p[5];
+        let plane2 = p[6] ^ p[7] ^ p[8];
 
         scene_selector.scenes = vec![
             PGAScene {
@@ -106,7 +106,7 @@ impl PGAScene {
             PGAScene {
                 name: PGAScene::LINE_AND_POINT_JOIN_IN_A_PLANE,
                 points: vec![p0.clone(), p1.clone(), p2.clone()],
-                lines: vec![(p1 & p2).value().unwrap()],
+                lines: vec![p1 ^ p2],
                 planes: vec![Plane::new(1.0, 0.0, 0.0, 0.0)],
                 directions: vec![],
                 input_point_count: 3,
@@ -115,7 +115,7 @@ impl PGAScene {
             PGAScene {
                 name: PGAScene::LINE_AND_PLANE_MEET_IN_A_POINT,
                 points: vec![p0.clone(), p1.clone(), p2.clone()],
-                lines: vec![(p1 & p2).value().unwrap()],
+                lines: vec![p1 ^ p2],
                 planes: vec![Plane::new(1.0, 0.0, 1.0, 1.0)],
                 directions: vec![],
                 input_point_count: 2,
@@ -167,7 +167,7 @@ impl PGAScene {
             PGAScene {
                 name: PGAScene::PLANE_PERP_THROUGH_POINT,
                 points: vec![Point::new(1.0, 0.0, 1.0), p1.clone(), p2.clone()],
-                lines: vec![(p1 & p2).value().unwrap()],
+                lines: vec![p1 ^ p2],
                 planes: vec![Plane::new(1.0, 0.0, 0.0, 0.0)],
                 directions: vec![],
                 input_point_count: 3,
@@ -176,7 +176,7 @@ impl PGAScene {
             PGAScene {
                 name: PGAScene::PROJECT_PLANE_ONTO_POINT,
                 points: vec![Point::new(1.0, 2.0, 3.0)],
-                lines: vec![],
+                lines: vec![Line::through_origin(1.0, 0.0, 0.0)],
                 planes: vec![
                     Plane::new(-1.0, 1.0, 1.0, 1.0),
                     Plane::new(0.0, 0.0, 0.0, 0.0),
@@ -199,11 +199,8 @@ impl PGAScene {
             PGAScene {
                 name: PGAScene::PROJECT_LINE_ONTO_PLANE,
                 points: vec![p0.clone(), p1.clone()],
-                lines: vec![
-                    (p1 & p2).value().unwrap(),
-                    Line::through_origin(0.0, 0.0, 0.0),
-                ],
-                planes: vec![Plane::new(1.0, 0.0, 1.0, 1.0)],
+                lines: vec![p1 ^ p2, Line::through_origin(0.0, 0.0, 0.0)],
+                planes: vec![Plane::new(1.0, 0.0, 1.0, 1.0), Plane::FORWARD],
                 directions: vec![],
                 input_point_count: 2,
                 input_plane_count: 1,
@@ -220,140 +217,121 @@ impl PGAScene {
 
         match scene.name {
             PGAScene::TWO_POINTS_JOIN_IN_A_LINE => {
-                let p0 = &scene.points[0];
-                let p1 = &scene.points[1];
+                let p0 = scene.points[0];
+                let p1 = scene.points[1];
                 // Output
-                let line = p0 & p1;
-                if let Some(line) = line.value() {
-                    scene.lines[0] = line;
-                }
+                scene.lines[0] = p0 ^ p1;
             }
             PGAScene::DIRECTIONS_AND_POINTS_JOIN_IN_A_LINE => {
                 // Inputs
-                let p0 = &scene.points[0];
-                let d0 = &scene.directions[0];
+                let p0 = scene.points[0];
+                let d0 = scene.directions[0];
                 // Output
-                if let Some(line) = (p0 & d0).value() {
-                    scene.lines[0] = line;
-                }
+                scene.lines[0] = p0 ^ d0;
             }
             PGAScene::THREE_POINTS_JOIN_IN_A_PLANE => {
                 // Inputs
-                let p0 = &scene.points[0];
-                let p1 = &scene.points[1];
-                let p2 = &scene.points[2];
+                let p0 = scene.points[0];
+                let p1 = scene.points[1];
+                let p2 = scene.points[2];
                 // Output
-                if let Some(plane) = (p0 & p1 & p2).value() {
-                    scene.planes[0] = plane;
-                }
+                scene.planes[0] = p0 ^ p1 ^ p2;
             }
             PGAScene::LINE_AND_POINT_JOIN_IN_A_PLANE => {
                 // Inputs
-                let p0 = &scene.points[0];
-                let p1 = &scene.points[1];
-                let p2 = &scene.points[2];
+                let p0 = scene.points[0];
+                let p1 = scene.points[1];
+                let p2 = scene.points[2];
 
                 // Output
-                if let Some(line) = (p1 & p2).value() {
-                    scene.lines[0] = line.clone();
-                    if let Some(plane) = (line & p0).value() {
-                        scene.planes[0] = plane;
-                    }
-                }
+                let line = p1 ^ p2;
+                scene.lines[0] = line;
+                scene.planes[0] = line ^ p0;
             }
             PGAScene::LINE_AND_PLANE_MEET_IN_A_POINT => {
                 // Inputs
-                let plane0 = &scene.planes[0];
-                let p0 = &scene.points[0];
-                let p1 = &scene.points[1];
+                let plane0 = scene.planes[0];
+                let p0 = scene.points[0];
+                let p1 = scene.points[1];
 
                 // Output
-                if let Some(line) = (p0 & p1).value() {
-                    scene.lines[0] = line.clone();
-                    if let Some(point) = (line ^ plane0).value() {
-                        scene.points[2] = point;
-                    }
-                }
+                let line = p0 ^ p1;
+                scene.lines[0] = line;
+                scene.points[2] = line & plane0;
             }
             PGAScene::TWO_PLANES_MEET_IN_A_LINE => {
-                let plane0 = &scene.planes[0];
-                let plane1 = &scene.planes[1];
+                let plane0 = scene.planes[0];
+                let plane1 = scene.planes[1];
 
                 // Output
-                let line = plane0 ^ plane1;
-                if let Some(line) = line.value() {
-                    scene.lines[0] = line;
-                }
+                scene.lines[0] = plane0 & plane1;
             }
             PGAScene::THREE_PLANES_MEET_IN_A_POINT => {
-                let plane0 = &scene.planes[0];
-                let plane1 = &scene.planes[1];
-                let plane2 = &scene.planes[2];
+                let plane0 = scene.planes[0];
+                let plane1 = scene.planes[1];
+                let plane2 = scene.planes[2];
 
                 // Output
-                let point = plane0 ^ plane1 ^ plane2;
-                if let Some(point) = point.value() {
-                    scene.points[0] = point;
-                }
+                scene.points[0] = plane0 & plane1 & plane2;
             }
             PGAScene::PLANE_PERP_THROUGH_LINE => {
-                let p0 = &scene.points[0];
-                let p1 = &scene.points[1];
-                let plane0 = &scene.planes[0];
+                let p0 = scene.points[0];
+                let p1 = scene.points[1];
+                let plane0 = scene.planes[0];
 
                 // Output
-                if let Some(line) = (p0 & p1).value() {
-                    scene.lines[0] = line.clone();
-                    if let Some(plane) = plane0 | line {
-                        scene.planes[1] = plane;
-                    }
-                }
+                let line = p0 ^ p1;
+                scene.lines[0] = line;
+                scene.planes[1] = line ^ plane0.weight().dual();
             }
             PGAScene::LINE_PERP_THROUGH_POINT => {
-                let p0 = &scene.points[0];
-                let plane0 = &scene.planes[0];
+                let p0 = scene.points[0];
+                let plane0 = scene.planes[0];
 
                 // Output
-                scene.lines[0] = plane0 | p0;
+                scene.lines[0] = p0 ^ plane0.weight().dual();
             }
             PGAScene::PLANE_PERP_THROUGH_POINT => {
                 // Inputs
-                let p0 = &scene.points[0];
-                let p1 = &scene.points[1];
-                let p2 = &scene.points[2];
+                let p0 = scene.points[0];
+                let p1 = scene.points[1];
+                let p2 = scene.points[2];
 
                 // Output
-                if let Some(line) = (p1 & p2).value() {
-                    scene.lines[0] = line.clone();
-                    scene.planes[0] = line | p0;
-                }
+                let line = p1 ^ p2;
+                scene.lines[0] = line;
+                scene.planes[0] = p0 ^ line.weight().dual();
             }
             PGAScene::PROJECT_PLANE_ONTO_POINT => {
-                let p0 = &scene.points[0];
-                let plane0 = &scene.planes[0];
+                let p0 = scene.points[0];
+                let plane0 = scene.planes[0];
 
                 // Output
-                scene.planes[1] = (plane0 | p0) * p0;
+                let line = p0 ^ plane0.weight().dual();
+                scene.lines[0] = line;
+                scene.planes[1] = p0 ^ line.weight().dual();
             }
             PGAScene::PROJECT_POINT_ONTO_PLANE => {
-                let p0 = &scene.points[0];
-                let plane0 = &scene.planes[0];
+                let p0 = scene.points[0];
+                let plane0 = scene.planes[0];
 
                 // Output
-                scene.points[1] = (plane0 | p0) * plane0;
+                let line = p0 ^ plane0.weight().dual();
+                scene.points[1] = plane0 & line;
             }
             PGAScene::PROJECT_LINE_ONTO_PLANE => {
-                let p0 = &scene.points[0];
-                let p1 = &scene.points[1];
-                let plane0 = &scene.planes[0];
+                let p0 = scene.points[0];
+                let p1 = scene.points[1];
+                let plane0 = scene.planes[0];
 
                 // Output
-                if let Some(line) = (p0 & p1).value() {
-                    scene.lines[0] = line.clone();
-                    if let Some(line) = (plane0 | line).and_then(|p| (p ^ plane0).value()) {
-                        scene.lines[1] = line;
-                    }
-                }
+
+                let line = p0 ^ p1;
+                scene.lines[0] = line;
+                let orthogonal_plane = line ^ plane0.weight().dual();
+                scene.planes[1] = orthogonal_plane;
+
+                scene.lines[1] = plane0 & orthogonal_plane;
             }
             _ => { /* Empty scene or unrecognized scene name */ }
         }

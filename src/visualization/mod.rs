@@ -16,8 +16,8 @@ use smooth_bevy_cameras::{
 
 mod scenes;
 
+use crate::pgai::{Direction, Line, Plane, Point};
 use crate::visualization::scenes::PGAScene;
-use crate::{Direction, Line, Plane, Point};
 
 #[derive(Default, Resource)]
 pub struct ObjectPool {
@@ -71,7 +71,7 @@ struct LineVisual(Line);
 struct PlaneVisual(Plane);
 
 #[derive(Component)]
-struct DirectionVisual(Direction);
+struct DirectionVisual(Point);
 
 #[derive(Component)]
 struct LinkedLabel(Entity);
@@ -177,11 +177,10 @@ fn spawn_object(commands: &mut Commands, color: SceneColor, text: String) -> Ent
 }
 
 fn plane_transform(plane: &Plane) -> Transform {
-    let dir = Vec3::new(plane.0.mvec[2], plane.0.mvec[3], plane.0.mvec[4]);
-    let distance = plane.0.mvec[1] / dir.length();
-    let normal = dir.normalize();
-    info!("Plane normal: {:?}", normal);
-    info!("Plane dir: {:?}", dir);
+    let mut plane = plane.clone();
+    plane.unitize();
+    let distance = plane.w();
+    let normal = Vec3::from(plane.direction).normalize();
     let rotation = Quat::from_rotation_arc(Vec3::Y, normal);
     Transform {
         translation: -normal * distance,
@@ -462,13 +461,13 @@ fn draw_pga_gizmos(
 
     // Draw points as small spheres
     for point in &scene.points {
-        let pos = pga_point_to_vec3(point);
+        let pos = point.project();
         gizmos.sphere(pos, 0.01, SceneColor::WHITE.linear_rgba());
     }
 
     // Draw directions as arrows from origin
-    for direction in &scene.directions {
-        let dir = pga_direction_to_vec3(direction);
+    for &direction in &scene.directions {
+        let dir = Vec3::from(direction);
         gizmos.arrow(Vec3::ZERO, dir * 2.0, SceneColor::ORANGE.linear_rgba());
     }
 
@@ -483,69 +482,28 @@ fn draw_pga_gizmos(
     }
 }
 
-/// Convert a PGA Point to a Bevy Vec3
-fn pga_point_to_vec3(point: &Point) -> Vec3 {
-    // Extract coordinates from the PGA point
-    // In PGA, a point is represented as x*e032 + y*e013 + z*e021 + e123
-    // We need to extract x, y, z coordinates
-    let pga = &point.0;
-
-    // Check if the point is at infinity (e123 component is zero)
-    if pga.mvec[14].abs() < f32::EPSILON {
-        return Vec3::ZERO; // Handle points at infinity
-    }
-
-    // Extract coordinates by dividing by the e123 component
-    let w = pga.mvec[14]; // e123 component
-    let x = pga.mvec[13] / w; // e032 component
-    let y = pga.mvec[12] / w; // e013 component  
-    let z = pga.mvec[11] / w; // e021 component
-
-    Vec3::new(x, y, z)
-}
-
 fn pga_point_on_plane(plane: &Plane) -> Vec3 {
-    let pga = &plane.0;
+    let plane = plane.unitized();
+    let w = plane.w();
 
-    // Extract plane equation coefficients: ax + by + cz + d = 0
-    let a = pga.mvec[2]; // e1
-    let b = pga.mvec[3]; // e2
-    let c = pga.mvec[4]; // e3
-    let d = pga.mvec[1]; // e0
-
-    let normal = Vec3::new(a, b, c);
-
-    if normal.length() < f32::EPSILON {
-        return Vec3::ZERO; // Invalid plane
+    if w.abs() < f32::EPSILON {
+        // TODO: This should return None..., since the plane does not go through the origin.
+        Vec3::ZERO // Ideal plane, no finite point
+    } else {
+        let direction = Vec3::from(plane.direction);
+        direction * -w
     }
-
-    let normal = normal.normalize();
-
-    // Find a point on the plane
-    let distance = -d / Vec3::new(a, b, c).length();
-    normal * distance
 }
 
 fn pga_point_on_line(line: &Line) -> Vec3 {
-    let pga = &line.0;
-
-    // Extract direction and moment components
-    let dir_x = pga.mvec[10]; // e31
-    let dir_y = pga.mvec[9]; // e23
-    let dir_z = pga.mvec[8]; // e12
-
-    let mom_x = pga.mvec[5]; // e02
-    let mom_y = pga.mvec[6]; // e03
-    let mom_z = pga.mvec[7]; // e01
-
-    let direction = Vec3::new(dir_x, dir_y, dir_z);
-    let moment = Vec3::new(mom_x, mom_y, mom_z);
-
+    let direction = line.direction;
     // If direction is zero, this is an ideal line (line at infinity)
-    if direction.length() < f32::EPSILON {
+    if direction.is_zero() {
         return Vec3::ZERO; // Ideal line, return origin as placeholder
     }
 
+    let direction = Vec3::from(direction);
+    let moment = Vec3::from(line.moment);
     // Find a point on the line using the relationship: point = direction × moment / |direction|²
     let dir_length_sq = direction.length_squared();
     if dir_length_sq > f32::EPSILON {
@@ -556,32 +514,20 @@ fn pga_point_on_line(line: &Line) -> Vec3 {
 }
 
 /// Convert a PGA Direction to a Bevy Vec3
-fn pga_direction_to_vec3(direction: &Direction) -> Vec3 {
-    let pga = &direction.0;
-
-    // Direction vectors are represented as x*e032 + y*e013 + z*e021
-    let x = pga.mvec[13]; // e032 component
-    let y = pga.mvec[12]; // e013 component
-    let z = pga.mvec[11]; // e021 component
-
-    Vec3::new(x, y, z)
+fn pga_direction_to_vec3(direction: Direction) -> Vec3 {
+    Vec3::from(direction)
 }
 
 /// Draw a PGA line using gizmos
 fn draw_pga_line(gizmos: &mut Gizmos, line: &Line, color: LinearRgba) {
-    // Extract direction and moment components
-    let dir = line.direction();
-    let moment = line.moment();
-
-    let direction = Vec3::new(dir[0], dir[1], dir[2]);
-    let moment = Vec3::new(moment[0], moment[1], moment[2]);
-
+    let direction = line.direction;
     // If direction is zero, this is an ideal line (line at infinity)
-    if direction.length() < f32::EPSILON {
-        // Draw as a small indicator for ideal lines
-        gizmos.sphere(Vec3::ZERO, 0.05, color);
+    if direction.is_zero() {
         return;
     }
+    // Extract direction and moment components
+    let direction = Vec3::from(direction);
+    let moment = Vec3::from(line.moment);
 
     // Find a point on the line using the relationship: point = direction × moment / |direction|²
     let dir_length_sq = direction.length_squared();
@@ -606,51 +552,17 @@ fn draw_pga_line(gizmos: &mut Gizmos, line: &Line, color: LinearRgba) {
 
 /// Draw just the normal arrow for a PGA plane (used when plane is drawn as mesh)
 fn draw_plane_normal_arrow(gizmos: &mut Gizmos, plane: &Plane, color: LinearRgba) {
-    let pga = &plane.0;
-
-    // Extract plane equation coefficients: ax + by + cz + d = 0
-    let a = pga.mvec[2]; // e1
-    let b = pga.mvec[3]; // e2
-    let c = pga.mvec[4]; // e3
-    let d = pga.mvec[1]; // e0
-
-    let normal = Vec3::new(a, b, c);
-
-    if normal.length() < f32::EPSILON {
-        return; // Invalid plane
-    }
-
-    let normal = normal.normalize();
-
-    // Find a point on the plane
-    let distance = -d / Vec3::new(a, b, c).length();
-    let point_on_plane = normal * distance;
+    let point_on_plane = pga_point_on_plane(plane);
+    let normal = Vec3::from(plane.direction).normalize();
 
     // Draw normal vector arrow
-    gizmos.arrow(point_on_plane, point_on_plane + normal * 1.0, color);
+    gizmos.arrow(point_on_plane, point_on_plane + normal, color);
 }
 
 /// Create a mesh and transform for a PGA plane
 fn create_plane_mesh(plane: &Plane) -> Mesh {
-    let pga = &plane.0;
-
-    // Extract plane equation coefficients: ax + by + cz + d = 0
-    let a = pga.mvec[2]; // e1
-    let b = pga.mvec[3]; // e2
-    let c = pga.mvec[4]; // e3
-    let d = pga.mvec[1]; // e0
-
-    let normal = Vec3::new(a, b, c);
-
-    if normal.length() < f32::EPSILON {
-        return Cuboid::new(0.0, 0.0, 0.0).mesh().build(); // Invalid plane
-    }
-
-    let normal = normal.normalize();
-
-    // Find a point on the plane
-    let distance = -d / Vec3::new(a, b, c).length();
-    let point_on_plane = normal * distance;
+    let point_on_plane = pga_point_on_plane(plane);
+    let normal = Vec3::from(plane.direction).normalize();
 
     // Create two orthogonal vectors in the plane
     let up = if normal.abs().dot(Vec3::Y) < 0.9 {
@@ -790,7 +702,7 @@ fn update_label_positions(
     };
 
     for (point, obj_entity) in scene.points.iter().zip(object_pool.points.iter()) {
-        update_position(*obj_entity, pga_point_to_vec3(point));
+        update_position(*obj_entity, point.project());
     }
 
     for (line, obj_entity) in scene.lines.iter().zip(object_pool.lines.iter()) {
@@ -801,8 +713,8 @@ fn update_label_positions(
         update_position(*obj_entity, pga_point_on_plane(plane));
     }
 
-    for (direction, obj_entity) in scene.directions.iter().zip(object_pool.directions.iter()) {
-        update_position(*obj_entity, pga_direction_to_vec3(direction));
+    for (&direction, obj_entity) in scene.directions.iter().zip(object_pool.directions.iter()) {
+        update_position(*obj_entity, Vec3::from(direction));
     }
 }
 
@@ -845,10 +757,10 @@ fn coordinate_editor_ui(
             });
 
             ui.horizontal(|ui| {
-                points_changed = edit_value("e0:", ui, &mut value.w)
-                    | edit_value("e1:", ui, &mut value.x)
-                    | edit_value("e2:", ui, &mut value.y)
-                    | edit_value("e3:", ui, &mut value.z)
+                points_changed = edit_value("x:", ui, &mut value.x)
+                    | edit_value("y:", ui, &mut value.y)
+                    | edit_value("z:", ui, &mut value.z)
+                    | edit_value("w:", ui, &mut value.w)
             })
         });
         ui.separator();
@@ -867,7 +779,7 @@ fn coordinate_editor_ui(
 
                 for i in 0..scene.input_point_count {
                     if let Some(point) = scene.points.get_mut(i) {
-                        let mut vec = pga_point_to_vec3(point);
+                        let mut vec = point.project();
                         points_changed |= edit_vec3("Point P", ui, &mut vec, i);
                         if points_changed {
                             *point = Point::new(vec[0], vec[1], vec[2]);
@@ -877,7 +789,7 @@ fn coordinate_editor_ui(
 
                 for i in 0..scene.input_direction_count {
                     if let Some(direction) = scene.directions.get_mut(i) {
-                        let mut vec = pga_direction_to_vec3(direction);
+                        let mut vec = Vec3::from(*direction);
                         points_changed |= edit_vec3("Direction D", ui, &mut vec, i);
                         if points_changed {
                             *direction = Direction::new(vec[0], vec[1], vec[2]);
@@ -890,12 +802,7 @@ fn coordinate_editor_ui(
 
                 for i in 0..scene.input_plane_count {
                     if let Some(plane) = scene.planes.get_mut(i) {
-                        let mut values = Vec4::new(
-                            plane.0.mvec[2], // e1
-                            plane.0.mvec[3], // e2
-                            plane.0.mvec[4], // e3
-                            plane.0.mvec[1], // e0
-                        );
+                        let mut values = Vec4::from(*plane);
                         points_changed |= edit_plane("Plane p", ui, &mut values, i);
                         if points_changed {
                             *plane = Plane::new(values.x, values.y, values.z, values.w);
