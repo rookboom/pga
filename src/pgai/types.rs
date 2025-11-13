@@ -3,7 +3,7 @@ use crate::{
     pgai::{BulkWeight, Dual},
 };
 use glam::{Vec3, Vec4};
-use std::ops::Neg;
+use std::ops::{Neg, Not};
 
 // ================================================================================================
 // GEOMETRIC ENTITIES
@@ -122,6 +122,25 @@ macro_rules! neg_geometric_entity {
     };
 }
 
+macro_rules! geometric_entity_dual {
+    ($t:ty, $d:ty) => {
+        impl Not for $t {
+            type Output = $d;
+
+            fn not(self) -> Self::Output {
+                self.dual()
+            }
+        }
+        impl Not for $d {
+            type Output = $t;
+
+            fn not(self) -> Self::Output {
+                self.dual()
+            }
+        }
+    };
+}
+
 neg_geometric_entity!(Point3);
 neg_geometric_entity!(Point4);
 neg_geometric_entity!(Line);
@@ -132,6 +151,10 @@ neg_geometric_entity!(LineMoment);
 neg_geometric_entity!(Direction);
 neg_geometric_entity!(Horizon);
 neg_geometric_entity!(Origin);
+
+geometric_entity_dual!(Direction, PlaneDirection);
+geometric_entity_dual!(LineDirection, LineMoment);
+geometric_entity_dual!(Horizon, Origin);
 
 impl_geometric_entity!(Point4, [
     e1 => x,

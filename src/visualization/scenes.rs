@@ -34,16 +34,17 @@ impl PGAScene {
 
     // Project & reject
     pub const PLANE_PERP_THROUGH_LINE: &str =
-        "The plane perpendicular to plane p0 through line L0: p1 = L0 ^ p0.weight.dual";
+        "The plane perpendicular to plane p0 through line L0: p1 = L0 ^ !p0.weight";
     pub const LINE_PERP_THROUGH_POINT: &str =
-        "The line perpendicular to plane p0 through point P0: p1 = P0 ^ p0.weight.dual";
+        "The line perpendicular to plane p0 through point P0: p1 = P0 ^ !p0.weight";
     pub const PLANE_PERP_THROUGH_POINT: &str =
-        "The plane perpendicular to line L0 through point P0: p0 = P0 ^ L0.weight.dual";
-    pub const PROJECT_PLANE_ONTO_POINT: &str = "The projection of plane p0 onto point P0: L0 = p0.weight.dual; p1 = P0 ^ (P0 ^ L0).weight.dual";
+        "The plane perpendicular to line L0 through point P0: p0 = P0 ^ !L0.weight";
+    pub const PROJECT_PLANE_ONTO_POINT: &str =
+        "The projection of plane p0 onto point P0: L0 = !p0.weight ^ P0; p1 = P0 ^ !L0.weight";
     pub const PROJECT_POINT_ONTO_PLANE: &str =
-        "The projection of point P0 onto plane p0: P1 = p0 & (P0 ^ p0.weight.dual)";
+        "The projection of point P0 onto plane p0: P1 = p0 & (P0 ^ !p0.weight)";
     pub const PROJECT_LINE_ONTO_PLANE: &str =
-        "The projection of line L0 onto plane p0: p1 = L0 ^ p0.weight.dual; L1 = p0 & p1";
+        "The projection of line L0 onto plane p0: p1 = L0 ^ !p0.weight; L1 = p0 & p1";
     /// Setup the initial scene with camera and lighting
     pub fn setup(mut scene_selector: ResMut<SceneSelector>) {
         let p0 = Point3::new(1.0, 0.0, 0.0);
@@ -282,14 +283,14 @@ impl PGAScene {
                 // Output
                 let line = p0 ^ p1;
                 scene.lines[0] = line;
-                scene.planes[1] = line ^ plane0.weight().dual();
+                scene.planes[1] = line ^ !plane0.weight();
             }
             PGAScene::LINE_PERP_THROUGH_POINT => {
                 let p0 = scene.points[0];
                 let plane0 = scene.planes[0];
 
                 // Output
-                scene.lines[0] = p0 ^ plane0.weight().dual();
+                scene.lines[0] = p0 ^ !plane0.weight();
             }
             PGAScene::PLANE_PERP_THROUGH_POINT => {
                 // Inputs
@@ -300,23 +301,23 @@ impl PGAScene {
                 // Output
                 let line = p1 ^ p2;
                 scene.lines[0] = line;
-                scene.planes[0] = p0 ^ line.weight().dual();
+                scene.planes[0] = p0 ^ !line.weight();
             }
             PGAScene::PROJECT_PLANE_ONTO_POINT => {
                 let p0 = scene.points[0];
                 let plane0 = scene.planes[0];
 
                 // Output
-                let line = p0 ^ plane0.weight().dual();
+                let line = !plane0.weight() ^ p0;
                 scene.lines[0] = line;
-                scene.planes[1] = p0 ^ line.weight().dual();
+                scene.planes[1] = p0 ^ !line.weight();
             }
             PGAScene::PROJECT_POINT_ONTO_PLANE => {
                 let p0 = scene.points[0];
                 let plane0 = scene.planes[0];
 
                 // Output
-                let line = p0 ^ plane0.weight().dual();
+                let line = p0 ^ !plane0.weight();
                 scene.points[1] = Point3::from(plane0 & line);
             }
             PGAScene::PROJECT_LINE_ONTO_PLANE => {
@@ -328,7 +329,7 @@ impl PGAScene {
 
                 let line = p0 ^ p1;
                 scene.lines[0] = line;
-                let orthogonal_plane = line ^ plane0.weight().dual();
+                let orthogonal_plane = line ^ !plane0.weight();
                 scene.planes[1] = orthogonal_plane;
 
                 scene.lines[1] = plane0 & orthogonal_plane;

@@ -169,6 +169,10 @@ pub trait Dual: GeometricEntity {
     fn dual(&self) -> Self::DualType;
 }
 
+pub trait Grade: GeometricEntity {
+    const GRADE: u8;
+}
+
 // ================================================================================================
 // TRAIT IMPLEMENTATIONS
 // ================================================================================================

@@ -150,14 +150,14 @@ mod tests {
     #[test]
     fn line_expands_to_a_perpendicular_plane() {
         let left = Plane::LEFT;
-        let plane: Plane = Line::Z_AXIS ^ left.weight().dual();
+        let plane: Plane = Line::Z_AXIS ^ !left.weight();
         assert_eq!(plane, -Plane::UP);
     }
 
     #[test]
     fn perpendicular_line_expands_as_zero() {
         let left = Plane::LEFT;
-        let plane = Line::X_AXIS ^ left.weight().dual();
+        let plane = Line::X_AXIS ^ !left.weight();
         assert!(plane.is_zero());
     }
 
@@ -165,14 +165,14 @@ mod tests {
     fn point_expands_from_plane_in_a_perpendicular_line() {
         let left = Plane::LEFT;
         let point = Point4::new(1.0, 0.0, 0.0, 1.0);
-        let line: Line = (point ^ left.weight().dual()).unitize();
+        let line: Line = (point ^ !left.weight()).unitize();
         assert_eq!(line, -Line::X_AXIS);
     }
 
     #[test]
     fn point_expands_from_line_in_a_perpendicular_plane() {
         let forward = Line::Z_AXIS;
-        let plane: Plane = Point3::new(1.0, 0.0, 0.0) ^ forward.weight().dual();
+        let plane: Plane = Point3::new(1.0, 0.0, 0.0) ^ !forward.weight();
         assert_eq!(plane, Plane::FORWARD);
     }
 
@@ -180,9 +180,9 @@ mod tests {
     fn project_plane_onto_point() {
         let left = Plane::LEFT;
         let point = Point3::new(1.0, 0.0, 0.0);
-        let line = point ^ left.weight().dual();
+        let line = point ^ !left.weight();
 
-        let plane: Plane = (point ^ line.weight().dual()).unitize();
+        let plane: Plane = (point ^ !line.weight()).unitize();
         assert_eq!(plane, Plane::new(-1.0, 0.0, 0.0, 1.0)); // Note the direction of the resulting plane changed from the input plane.
     }
 
@@ -190,7 +190,7 @@ mod tests {
     fn project_point_onto_plane() {
         let plane = Plane::new(1.0, 0.0, 0.0, 0.0);
         let point = Point3::new(3.0, 0.0, 0.0);
-        let line = point ^ plane.weight().dual();
+        let line = point ^ !plane.weight();
         let projected_point: Point3 = Point3::from(plane & line);
 
         assert_eq!(projected_point, Point3::new(0.0, 0.0, 0.0));
