@@ -4,14 +4,14 @@ This project is a stab at creating a type safe geometric algebra library. It all
 
 ## Joining two points in a line:
 
-```
+```rust
    let p0 = Point3::new(0.0, 0.0, 0.0);
    let p1 = Point3::new(1.0, 0.0, 0.0);
    let line: Line = p0 ^ p1;
 ```
 
 ## Joining three points in a plane:
-``` 
+```rust 
    let p0 = Point3::new(0.0, 0.0, 0.0);
    let p1 = Point3::new(1.0, 0.0, 0.0);
    let p2 = Point3::new(1.0, 1.0, 0.0);
@@ -19,14 +19,22 @@ This project is a stab at creating a type safe geometric algebra library. It all
 ```
 
 ## Line and a plane meet in a point or direction when coplanar:
-``` 
+```rust 
    let p0 = Point3::new(0.0, 0.0, 0.0);
    let p1 = Point3::new(1.0, 0.0, 0.0);
    let p2 = Point3::new(0.0, 1.0, 0.0);
    let line: Line = p0 ^ p1;
    let plane: Plane = line ^ p2;
    let point4: Point4 = plane & line;
-   let p: PointOrDirection = point4.into();
+   let point4: Point4 = plane & line;
+   match point4.into() {
+      PointOrDirection::Point(p) => {
+            println!("Line and plane meet at finite point {:?}", p);
+      }
+      PointOrDirection::Direction(d) => {
+            println!("Line and plane meet at infinite point in direction {:?}", d);
+      }
+   }
 ```
 
-See visualizations [here](https://rookboom.github.io/pga/).
+See more examples and visualizations [here](https://rookboom.github.io/pga/).
