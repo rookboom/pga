@@ -171,7 +171,7 @@ pub trait BulkWeight {
     fn weight(&self) -> Self::Weight;
 }
 
-trait Dual {
+pub trait Dual {
     type DualType: GeometricEntity + Dual<DualType = Self>;
     fn dual(&self) -> Self::DualType;
 }

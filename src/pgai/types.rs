@@ -317,7 +317,7 @@ impl Dual for Horizon {
 
 impl From<Point4> for PointOrDirection {
     fn from(p: Point4) -> Self {
-        if p.w.abs() < std::f32::EPSILON {
+        if p.w.abs() < f32::EPSILON {
             PointOrDirection::Direction(p.bulk())
         } else {
             PointOrDirection::Point(p.into())

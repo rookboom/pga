@@ -68,8 +68,7 @@ mod tests {
         let p1: Plane = Plane::new(0.0, 1.0, 0.0, -2.0); // y = 2
 
         let p2: Plane = Plane::new(0.0, 0.0, 1.0, -3.0); // z = 3
-        let l0 = p0 & p1;
-        let p3 = l0 & p2;
+
         let point = Point3::from(p0 & p1 & p2);
         let expected = Point3::new(1.0, 2.0, 3.0);
         assert_approx_eq!(point, expected);
