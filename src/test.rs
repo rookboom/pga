@@ -1,9 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use glam::Vec3;
-
     use crate::pgai::{
-        BulkWeight, Direction, GeometricEntity, Line, Origin, Plane, PlaneDirection, Point3, Point4,
+        BulkWeight, Direction, Dual, GeometricEntity, Line, Origin, Plane, PlaneDirection, Point3,
+        Point4,
     };
     use crate::{ApproxEq, assert_approx_eq};
 
@@ -80,7 +79,7 @@ mod tests {
         let p1 = Point4::new(1.0, 0.0, 0.0, 1.0);
         let line: Line = p0 ^ p1;
         // Use a plane that doesn't pass through the origin: x = 0.5
-        let plane = Plane::from_normal_distance(Vec3::new(1.0, 0.0, 0.0), -0.5);
+        let plane = Plane::new(1.0, 0.0, 0.0, -0.5);
         let point = plane & line;
         let expected = Point3::new(0.5, 0.0, 0.0);
         assert_approx_eq!(Point3::from(point), expected);
@@ -166,8 +165,7 @@ mod tests {
     fn point_expands_from_plane_in_a_perpendicular_line() {
         let left = Plane::LEFT;
         let point = Point4::new(1.0, 0.0, 0.0, 1.0);
-        let mut line: Line = point ^ left.weight().dual();
-        line.unitize();
+        let line: Line = (point ^ left.weight().dual()).unitize();
         assert_eq!(line, -Line::X_AXIS);
     }
 
@@ -184,8 +182,7 @@ mod tests {
         let point = Point3::new(1.0, 0.0, 0.0);
         let line = point ^ left.weight().dual();
 
-        let mut plane: Plane = point ^ line.weight().dual();
-        plane.unitize();
+        let plane: Plane = (point ^ line.weight().dual()).unitize();
         assert_eq!(plane, Plane::new(-1.0, 0.0, 0.0, 1.0)); // Note the direction of the resulting plane changed from the input plane.
     }
 

@@ -196,6 +196,42 @@ impl_geometric_entity!(Origin, [
 ]);
 
 // ================================================================================================
+// IMPLEMENTATIONS
+// ================================================================================================
+
+impl Line {
+    pub const X_AXIS: Line = Line::new(1.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+    pub const Y_AXIS: Line = Line::new(0.0, 1.0, 0.0, 0.0, 0.0, 0.0);
+    pub const Z_AXIS: Line = Line::new(0.0, 0.0, 1.0, 0.0, 0.0, 0.0);
+
+    pub fn through_origin(x: f32, y: f32, z: f32) -> Self {
+        Line::new(x, y, z, 0.0, 0.0, 0.0)
+    }
+}
+
+impl Plane {
+    pub const LEFT: Plane = Plane::new(1.0, 0.0, 0.0, 0.0);
+    pub const UP: Plane = Plane::new(0.0, 1.0, 0.0, 0.0);
+    pub const FORWARD: Plane = Plane::new(0.0, 0.0, 1.0, 0.0);
+}
+
+impl Direction {
+    const ZERO: Direction = Direction::new(0.0, 0.0, 0.0);
+}
+
+impl Origin {
+    const ZERO: Origin = Origin::new(0.0);
+}
+
+impl Horizon {
+    const ZERO: Horizon = Horizon::new(0.0);
+}
+
+impl PlaneDirection {
+    const ZERO: PlaneDirection = PlaneDirection::new(0.0, 0.0, 0.0);
+}
+
+// ================================================================================================
 // TRAIT IMPLEMENTATIONS
 // ================================================================================================
 impl BulkWeight for Point4 {
@@ -216,10 +252,10 @@ impl BulkWeight for Point4 {
 }
 
 impl BulkWeight for Plane {
-    type Bulk = PlaneDirection;
-    type Weight = Horizon;
+    type Bulk = Horizon;
+    type Weight = PlaneDirection;
 
-    fn bulk(&self) -> PlaneDirection {
+    fn weight(&self) -> PlaneDirection {
         PlaneDirection {
             x: self.x,
             y: self.y,
@@ -227,16 +263,16 @@ impl BulkWeight for Plane {
         }
     }
 
-    fn weight(&self) -> Horizon {
+    fn bulk(&self) -> Horizon {
         Horizon { w: self.w }
     }
 }
 
 impl BulkWeight for Line {
-    type Bulk = LineDirection;
-    type Weight = LineMoment;
+    type Bulk = LineMoment;
+    type Weight = LineDirection;
 
-    fn bulk(&self) -> LineDirection {
+    fn weight(&self) -> LineDirection {
         LineDirection {
             x: self.vx,
             y: self.vy,
@@ -244,7 +280,7 @@ impl BulkWeight for Line {
         }
     }
 
-    fn weight(&self) -> LineMoment {
+    fn bulk(&self) -> LineMoment {
         LineMoment {
             x: self.mx,
             y: self.my,
@@ -268,9 +304,9 @@ impl Dual for PlaneDirection {
     type DualType = Direction;
     fn dual(&self) -> Self::DualType {
         Direction {
-            x: self.x,
-            y: self.y,
-            z: self.z,
+            x: -self.x,
+            y: -self.y,
+            z: -self.z,
         }
     }
 }
@@ -279,9 +315,9 @@ impl Dual for LineDirection {
     type DualType = LineMoment;
     fn dual(&self) -> Self::DualType {
         LineMoment {
-            x: self.x,
-            y: self.y,
-            z: self.z,
+            x: -self.x,
+            y: -self.y,
+            z: -self.z,
         }
     }
 }
@@ -290,9 +326,9 @@ impl Dual for LineMoment {
     type DualType = LineDirection;
     fn dual(&self) -> Self::DualType {
         LineDirection {
-            x: self.x,
-            y: self.y,
-            z: self.z,
+            x: -self.x,
+            y: -self.y,
+            z: -self.z,
         }
     }
 }
@@ -307,7 +343,7 @@ impl Dual for Origin {
 impl Dual for Horizon {
     type DualType = Origin;
     fn dual(&self) -> Self::DualType {
-        Origin { w: self.w }
+        Origin { w: -self.w }
     }
 }
 

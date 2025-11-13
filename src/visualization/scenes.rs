@@ -1,4 +1,4 @@
-use crate::pgai::{Direction, Line, Plane, Point3};
+use crate::pgai::{BulkWeight, Direction, Dual, Line, Plane, Point3};
 use crate::visualization::SceneSelector;
 
 use bevy::prelude::*;

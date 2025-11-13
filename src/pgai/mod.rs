@@ -1,7 +1,6 @@
 mod types;
 mod wedge;
 
-use glam::Vec3;
 use std::ops::Neg;
 pub use types::*;
 
@@ -130,48 +129,42 @@ pub trait GeometricEntity: Default + Neg {
         self.length_squared().sqrt()
     }
 
-    fn normalize(&self) -> Self
-    where
-        Self: Sized,
-    {
-        let len = self.norm();
-        if len > f32::EPSILON {
-            let inv_len = 1.0 / len;
-            let mut result = Self::default();
-            result.set_e0(self.e0() * inv_len);
-            result.set_e1(self.e1() * inv_len);
-            result.set_e2(self.e2() * inv_len);
-            result.set_e3(self.e3() * inv_len);
-            result.set_e41(self.e41() * inv_len);
-            result.set_e42(self.e42() * inv_len);
-            result.set_e43(self.e43() * inv_len);
-            result.set_e23(self.e23() * inv_len);
-            result.set_e31(self.e31() * inv_len);
-            result.set_e12(self.e12() * inv_len);
-            result.set_e423(self.e423() * inv_len);
-            result.set_e431(self.e431() * inv_len);
-            result.set_e412(self.e412() * inv_len);
-            result.set_e321(self.e321() * inv_len);
-            result.set_scalar(self.scalar() * inv_len);
-            result.set_antiscalar(self.antiscalar() * inv_len);
-            result
-        } else {
-            Self::default()
-        }
-    }
     fn is_zero(&self) -> bool {
         self.length_squared() <= f32::EPSILON
     }
 }
 
-pub trait BulkWeight {
+pub trait BulkWeight: GeometricEntity {
     type Bulk: Dual;
     type Weight: Dual;
     fn bulk(&self) -> Self::Bulk;
     fn weight(&self) -> Self::Weight;
+
+    /// Unitizes the plane (normalizes the normal vector)
+    fn unitize(&self) -> Self {
+        let mut result = Self::default();
+        let inv_mag = 1.0 / self.weight().norm();
+        result.set_e0(self.e0() * inv_mag);
+        result.set_e1(self.e1() * inv_mag);
+        result.set_e2(self.e2() * inv_mag);
+        result.set_e3(self.e3() * inv_mag);
+        result.set_e41(self.e41() * inv_mag);
+        result.set_e42(self.e42() * inv_mag);
+        result.set_e43(self.e43() * inv_mag);
+        result.set_e23(self.e23() * inv_mag);
+        result.set_e31(self.e31() * inv_mag);
+        result.set_e12(self.e12() * inv_mag);
+        result.set_e423(self.e423() * inv_mag);
+        result.set_e431(self.e431() * inv_mag);
+        result.set_e412(self.e412() * inv_mag);
+        result.set_e321(self.e321() * inv_mag);
+        result.set_scalar(self.scalar() * inv_mag);
+        result.set_antiscalar(self.antiscalar() * inv_mag);
+        result
+    }
 }
 
-pub trait Dual {
+pub trait Dual: GeometricEntity {
     type DualType: GeometricEntity + Dual<DualType = Self>;
     fn dual(&self) -> Self::DualType;
 }
@@ -201,170 +194,5 @@ where
             && (self.e321() - other.e321()).abs() <= epsilon
             && (self.scalar() - other.scalar()).abs() <= epsilon
             && (self.antiscalar() - other.antiscalar()).abs() <= epsilon
-    }
-}
-
-// ================================================================================================
-// IMPLEMENTATIONS
-// ================================================================================================
-
-impl Line {
-    pub const X_AXIS: Line = Line::new(1.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-    pub const Y_AXIS: Line = Line::new(0.0, 1.0, 0.0, 0.0, 0.0, 0.0);
-    pub const Z_AXIS: Line = Line::new(0.0, 0.0, 1.0, 0.0, 0.0, 0.0);
-
-    pub fn through_origin(x: f32, y: f32, z: f32) -> Self {
-        Line::new(x, y, z, 0.0, 0.0, 0.0)
-    }
-
-    pub fn bulk(&self) -> LineMoment {
-        LineMoment::new(self.mx, self.my, self.mz)
-    }
-
-    pub fn weight(&self) -> LineDirection {
-        LineDirection::new(self.vx, self.vy, self.vz)
-    }
-
-    // pub fn is_valid(&self) -> bool {
-    //     self.weight().norm() > f32::EPSILON
-    // }
-
-    pub fn unitize(&mut self) -> &mut Self {
-        let inv_mag = 1.0 / (self.vx * self.vx + self.vy * self.vy + self.vz * self.vz).sqrt();
-        self.vx *= inv_mag;
-        self.vy *= inv_mag;
-        self.vz *= inv_mag;
-        self.mx *= inv_mag;
-        self.my *= inv_mag;
-        self.mz *= inv_mag;
-
-        self
-    }
-}
-
-impl Plane {
-    pub const LEFT: Plane = Plane::new(1.0, 0.0, 0.0, 0.0);
-    pub const UP: Plane = Plane::new(0.0, 1.0, 0.0, 0.0);
-    pub const FORWARD: Plane = Plane::new(0.0, 0.0, 1.0, 0.0);
-
-    pub fn from_normal_distance(normal: Vec3, distance: f32) -> Self {
-        Plane::new(normal.x, normal.y, normal.z, distance)
-    }
-
-    pub fn from_normal_point(normal: Vec3, point: Vec3) -> Self {
-        let normal = normal.normalize();
-        Plane::new(
-            normal.x,
-            normal.y,
-            normal.z,
-            -(normal.x * point.x + normal.y * point.y + normal.z * point.z),
-        )
-    }
-
-    pub fn bulk(&self) -> Horizon {
-        Horizon::new(self.w)
-    }
-
-    pub fn weight(&self) -> PlaneDirection {
-        PlaneDirection::new(self.x, self.y, self.z)
-    }
-
-    // pub fn is_valid(&self) -> bool {
-    //     self.direction.is_valid()
-    // }
-
-    /// Unitizes the plane (normalizes the normal vector)
-    pub fn unitize(&mut self) -> &mut Self {
-        *self = self.unitized();
-        self
-    }
-
-    /// Unitizes the plane (normalizes the normal vector)
-    pub fn unitized(&self) -> Self {
-        let inv_mag = 1.0 / self.weight().norm();
-        Plane::new(
-            self.x * inv_mag,
-            self.y * inv_mag,
-            self.z * inv_mag,
-            self.w * inv_mag,
-        )
-    }
-}
-
-impl Direction {
-    const ZERO: Direction = Direction::new(0.0, 0.0, 0.0);
-
-    pub fn dual(&self) -> PlaneDirection {
-        PlaneDirection::new(self.x, self.y, self.z)
-    }
-
-    pub fn is_valid(&self) -> bool {
-        self.norm() > f32::EPSILON
-    }
-
-    pub fn unitize(&mut self) -> &mut Self {
-        let n = self.norm();
-        *self = if n > f32::EPSILON {
-            Self::new(self.x / n, self.y / n, self.z / n)
-        } else {
-            Self::ZERO
-        };
-        self
-    }
-}
-
-impl Origin {
-    const ZERO: Origin = Origin::new(0.0);
-
-    pub fn dual(&self) -> Horizon {
-        Horizon::new(self.w)
-    }
-
-    pub fn is_valid(&self) -> bool {
-        self.norm() > f32::EPSILON
-    }
-}
-
-impl Horizon {
-    const ZERO: Horizon = Horizon::new(0.0);
-
-    pub fn dual(&self) -> Origin {
-        Origin::new(-self.w)
-    }
-
-    pub fn is_valid(&self) -> bool {
-        self.norm() > f32::EPSILON
-    }
-}
-
-impl PlaneDirection {
-    const ZERO: PlaneDirection = PlaneDirection::new(0.0, 0.0, 0.0);
-
-    pub fn dual(&self) -> Direction {
-        Direction::new(-self.x, -self.y, -self.z)
-    }
-
-    pub fn is_valid(&self) -> bool {
-        self.norm() > f32::EPSILON
-    }
-}
-
-impl LineMoment {
-    pub fn dual(&self) -> LineDirection {
-        LineDirection::new(-self.x, -self.y, -self.z)
-    }
-
-    pub fn is_valid(&self) -> bool {
-        self.norm() > f32::EPSILON
-    }
-}
-
-impl LineDirection {
-    pub fn dual(&self) -> LineMoment {
-        LineMoment::new(-self.x, -self.y, -self.z)
-    }
-
-    pub fn is_valid(&self) -> bool {
-        self.norm() > f32::EPSILON
     }
 }

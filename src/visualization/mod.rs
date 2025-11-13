@@ -16,7 +16,7 @@ use smooth_bevy_cameras::{
 
 mod scenes;
 
-use crate::pgai::{Direction, GeometricEntity, Line, Plane, Point3};
+use crate::pgai::{BulkWeight, Direction, GeometricEntity, Line, Plane, Point3};
 use crate::visualization::scenes::PGAScene;
 
 #[derive(Default, Resource)]
@@ -177,8 +177,7 @@ fn spawn_object(commands: &mut Commands, color: SceneColor, text: String) -> Ent
 }
 
 fn plane_transform(plane: &Plane) -> Transform {
-    let mut plane = plane.clone();
-    plane.unitize();
+    let plane = plane.unitize();
     let distance = plane.w;
     let normal = Vec3::from(plane.weight()).normalize();
     let rotation = Quat::from_rotation_arc(Vec3::Y, normal);
@@ -483,7 +482,7 @@ fn draw_pga_gizmos(
 }
 
 fn pga_point_on_plane(plane: &Plane) -> Vec3 {
-    let plane = plane.unitized();
+    let plane = plane.unitize();
 
     if plane.w.abs() < f32::EPSILON {
         // TODO: This should return None..., since the plane does not go through the origin.
