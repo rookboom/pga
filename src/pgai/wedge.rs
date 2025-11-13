@@ -143,6 +143,7 @@ impl_wedge!(Line, Point3, Plane);
 impl_wedge!(Line, Direction, Plane);
 impl_wedge!(Point4, Direction, Line);
 impl_wedge!(Point3, Direction, Line);
+impl_wedge!(Direction, Point3, Line);
 impl_wedge!(Point4, LineMoment, Plane);
 impl_wedge!(Point3, LineMoment, Plane);
 impl_wedge!(Line, Point4, Plane);
