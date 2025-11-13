@@ -227,6 +227,10 @@ impl Line {
     pub const Y_AXIS: Line = Line::new(0.0, 1.0, 0.0, 0.0, 0.0, 0.0);
     pub const Z_AXIS: Line = Line::new(0.0, 0.0, 1.0, 0.0, 0.0, 0.0);
 
+    pub fn direction(&self) -> LineDirection {
+        self.weight()
+    }
+
     pub fn through_origin(x: f32, y: f32, z: f32) -> Self {
         Line::new(x, y, z, 0.0, 0.0, 0.0)
     }
@@ -236,6 +240,10 @@ impl Plane {
     pub const LEFT: Plane = Plane::new(1.0, 0.0, 0.0, 0.0);
     pub const UP: Plane = Plane::new(0.0, 1.0, 0.0, 0.0);
     pub const FORWARD: Plane = Plane::new(0.0, 0.0, 1.0, 0.0);
+
+    pub fn direction(&self) -> PlaneDirection {
+        self.weight()
+    }
 }
 
 impl Direction {

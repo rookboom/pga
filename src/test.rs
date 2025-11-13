@@ -1,8 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::pgai::{
-        BulkWeight, Direction, Dual, GeometricEntity, Line, Origin, Plane, PlaneDirection, Point3,
-        Point4,
+        BulkWeight, Direction, GeometricEntity, Line, Origin, Plane, PlaneDirection, Point3, Point4,
     };
     use crate::{ApproxEq, assert_approx_eq};
 
@@ -134,7 +133,7 @@ mod tests {
         let line: Line = p0 ^ p1;
         let plane = line ^ p2;
         assert!(!plane.is_zero());
-        assert_approx_eq!(plane.weight(), PlaneDirection::new(0.0, 0.0, 1.0));
+        assert_approx_eq!(plane.direction(), PlaneDirection::new(0.0, 0.0, 1.0));
     }
 
     #[test]
@@ -150,14 +149,14 @@ mod tests {
     #[test]
     fn line_expands_to_a_perpendicular_plane() {
         let left = Plane::LEFT;
-        let plane: Plane = Line::Z_AXIS ^ !left.weight();
+        let plane: Plane = Line::Z_AXIS ^ !left.direction();
         assert_eq!(plane, -Plane::UP);
     }
 
     #[test]
     fn perpendicular_line_expands_as_zero() {
         let left = Plane::LEFT;
-        let plane = Line::X_AXIS ^ !left.weight();
+        let plane = Line::X_AXIS ^ !left.direction();
         assert!(plane.is_zero());
     }
 
@@ -165,14 +164,14 @@ mod tests {
     fn point_expands_from_plane_in_a_perpendicular_line() {
         let left = Plane::LEFT;
         let point = Point4::new(1.0, 0.0, 0.0, 1.0);
-        let line: Line = (point ^ !left.weight()).unitize();
+        let line: Line = (point ^ !left.direction()).unitize();
         assert_eq!(line, -Line::X_AXIS);
     }
 
     #[test]
     fn point_expands_from_line_in_a_perpendicular_plane() {
         let forward = Line::Z_AXIS;
-        let plane: Plane = Point3::new(1.0, 0.0, 0.0) ^ !forward.weight();
+        let plane: Plane = Point3::new(1.0, 0.0, 0.0) ^ !forward.direction();
         assert_eq!(plane, Plane::FORWARD);
     }
 
@@ -180,9 +179,9 @@ mod tests {
     fn project_plane_onto_point() {
         let left = Plane::LEFT;
         let point = Point3::new(1.0, 0.0, 0.0);
-        let line = point ^ !left.weight();
+        let line = point ^ !left.direction();
 
-        let plane: Plane = (point ^ !line.weight()).unitize();
+        let plane: Plane = (point ^ !line.direction()).unitize();
         assert_eq!(plane, Plane::new(-1.0, 0.0, 0.0, 1.0)); // Note the direction of the resulting plane changed from the input plane.
     }
 
@@ -190,7 +189,7 @@ mod tests {
     fn project_point_onto_plane() {
         let plane = Plane::new(1.0, 0.0, 0.0, 0.0);
         let point = Point3::new(3.0, 0.0, 0.0);
-        let line = point ^ !plane.weight();
+        let line = point ^ !plane.direction();
         let projected_point: Point3 = Point3::from(plane & line);
 
         assert_eq!(projected_point, Point3::new(0.0, 0.0, 0.0));

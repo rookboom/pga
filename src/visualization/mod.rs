@@ -179,7 +179,7 @@ fn spawn_object(commands: &mut Commands, color: SceneColor, text: String) -> Ent
 fn plane_transform(plane: &Plane) -> Transform {
     let plane = plane.unitize();
     let distance = plane.w;
-    let normal = Vec3::from(plane.weight()).normalize();
+    let normal = Vec3::from(plane.direction()).normalize();
     let rotation = Quat::from_rotation_arc(Vec3::Y, normal);
     Transform {
         translation: -normal * distance,
@@ -488,13 +488,13 @@ fn pga_point_on_plane(plane: &Plane) -> Vec3 {
         // TODO: This should return None..., since the plane does not go through the origin.
         Vec3::ZERO // Ideal plane, no finite point
     } else {
-        let direction = Vec3::from(plane.weight());
+        let direction = Vec3::from(plane.direction());
         direction * -plane.w
     }
 }
 
 fn pga_point_on_line(line: &Line) -> Vec3 {
-    let direction = line.weight();
+    let direction = line.direction();
     // If direction is zero, this is an ideal line (line at infinity)
     if direction.is_zero() {
         return Vec3::ZERO; // Ideal line, return origin as placeholder
@@ -518,7 +518,7 @@ fn pga_direction_to_vec3(direction: Direction) -> Vec3 {
 
 /// Draw a PGA line using gizmos
 fn draw_pga_line(gizmos: &mut Gizmos, line: &Line, color: LinearRgba) {
-    let direction = line.weight();
+    let direction = line.direction();
     // If direction is zero, this is an ideal line (line at infinity)
     if direction.is_zero() {
         return;
@@ -551,7 +551,7 @@ fn draw_pga_line(gizmos: &mut Gizmos, line: &Line, color: LinearRgba) {
 /// Draw just the normal arrow for a PGA plane (used when plane is drawn as mesh)
 fn draw_plane_normal_arrow(gizmos: &mut Gizmos, plane: &Plane, color: LinearRgba) {
     let point_on_plane = pga_point_on_plane(plane);
-    let normal = Vec3::from(plane.weight()).normalize();
+    let normal = Vec3::from(plane.direction()).normalize();
 
     // Draw normal vector arrow
     gizmos.arrow(point_on_plane, point_on_plane + normal, color);
@@ -560,7 +560,7 @@ fn draw_plane_normal_arrow(gizmos: &mut Gizmos, plane: &Plane, color: LinearRgba
 /// Create a mesh and transform for a PGA plane
 fn create_plane_mesh(plane: &Plane) -> Mesh {
     let point_on_plane = pga_point_on_plane(plane);
-    let normal = Vec3::from(plane.weight()).normalize();
+    let normal = Vec3::from(plane.direction()).normalize();
 
     // Create two orthogonal vectors in the plane
     let up = if normal.abs().dot(Vec3::Y) < 0.9 {
