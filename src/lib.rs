@@ -13,7 +13,64 @@ use glam::Vec3;
 #[cfg(all(target_arch = "wasm32", feature = "web"))]
 pub use web::*;
 
-use crate::pgai::{Direction, Line, Origin, Plane, PlaneDirection, Point};
+/// Generate getter and setter methods for fields of a geometric entity
+#[macro_export]
+macro_rules! impl_geometric_entity_trait {
+    ($type:ty, [$($coord:ident => $value:tt),*]) => {
+        impl $crate::pgai::GeometricEntity for $type {
+            $(
+                #[inline]
+                fn $coord(&self) -> f32 {
+                    $crate::impl_geometric_entity_trait!(@get_value self, $value)
+                }
+
+                $crate::impl_geometric_entity_trait!(@maybe_setter $coord, $value);
+            )*
+        }
+    };
+    (@get_value $self:ident, $field:ident) => { $self.$field };
+    (@get_value $self:ident, $literal:literal) => { $literal };
+
+    (@maybe_setter $coord:ident, $field:ident) => {
+        paste::paste! {
+            #[inline]
+            fn [<set_ $coord>](&mut self, value: f32) {
+                self.$field = value;
+            }
+        }
+    };
+    (@maybe_setter $coord:ident, $literal:literal) => {};
+}
+
+// Generate const constructor
+#[macro_export]
+macro_rules! impl_constructor {
+    ($type:ty, [$($field:ident),*]) => {
+        impl $type {
+            pub const fn new($($field: f32),*) -> Self {
+                Self {
+                    $($field),*
+                }
+            }
+        }
+    };
+}
+
+/// Generate all implementations for a geometric entity - composite macro
+#[macro_export]
+macro_rules! impl_geometric_entity {
+    // For types with only field values (no literals)
+    ($type:ty, [$($coord:ident => $field:ident),*]) => {
+        $crate::impl_geometric_entity_trait!($type, [$($coord => $field),*]);
+        $crate::impl_constructor!($type, [$($field),*]);
+    };
+
+    // For types with mixed field values and literals
+    ($type:ty, [$($coord:ident => $value:tt),*], fields: [$($field:ident),*]) => {
+        $crate::impl_geometric_entity_trait!($type, [$($coord => $value),*]);
+        $crate::impl_constructor!($type, [$($field),*]);
+    };
+}
 
 /// Trait for approximate equality comparisons, useful for floating-point tests
 pub trait ApproxEq {
@@ -37,53 +94,6 @@ impl ApproxEq for Vec3 {
         (self.x - other.x).abs() < epsilon
             && (self.y - other.y).abs() < epsilon
             && (self.z - other.z).abs() < epsilon
-    }
-}
-
-impl ApproxEq for Point {
-    fn approx_eq_eps(&self, other: &Self, epsilon: f32) -> bool {
-        self.x().approx_eq_eps(&other.x(), epsilon)
-            && self.y().approx_eq_eps(&other.y(), epsilon)
-            && self.z().approx_eq_eps(&other.z(), epsilon)
-            && self.w().approx_eq_eps(&other.w(), epsilon)
-    }
-}
-
-impl ApproxEq for Line {
-    fn approx_eq_eps(&self, other: &Self, epsilon: f32) -> bool {
-        Vec3::from(self.moment).approx_eq_eps(&Vec3::from(other.moment), epsilon)
-            && Vec3::from(self.direction).approx_eq_eps(&Vec3::from(other.direction), epsilon)
-    }
-}
-
-impl ApproxEq for Plane {
-    fn approx_eq_eps(&self, other: &Self, epsilon: f32) -> bool {
-        self.x().approx_eq_eps(&other.x(), epsilon)
-            && self.y().approx_eq_eps(&other.y(), epsilon)
-            && self.z().approx_eq_eps(&other.z(), epsilon)
-            && self.w().approx_eq_eps(&other.w(), epsilon)
-    }
-}
-
-impl ApproxEq for Direction {
-    fn approx_eq_eps(&self, other: &Self, epsilon: f32) -> bool {
-        self.x().approx_eq_eps(&other.x(), epsilon)
-            && self.y().approx_eq_eps(&other.y(), epsilon)
-            && self.z().approx_eq_eps(&other.z(), epsilon)
-    }
-}
-
-impl ApproxEq for PlaneDirection {
-    fn approx_eq_eps(&self, other: &Self, epsilon: f32) -> bool {
-        self.x().approx_eq_eps(&other.x(), epsilon)
-            && self.y().approx_eq_eps(&other.y(), epsilon)
-            && self.z().approx_eq_eps(&other.z(), epsilon)
-    }
-}
-
-impl ApproxEq for Origin {
-    fn approx_eq_eps(&self, other: &Self, epsilon: f32) -> bool {
-        f32::from(*self).approx_eq_eps(&f32::from(*other), epsilon)
     }
 }
 
@@ -143,16 +153,4 @@ macro_rules! assert_approx_ne {
             }
         }
     };
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn line_axes() {
-        assert_eq!(-Line::Z_AXIS, Plane::LEFT & Plane::UP);
-        assert_eq!(-Line::Y_AXIS, Plane::FORWARD & Plane::LEFT);
-        assert_eq!(-Line::X_AXIS, Plane::UP & Plane::FORWARD);
-    }
 }

@@ -1,12 +1,12 @@
-use crate::pgai::Direction;
+use crate::pgai::{BulkWeight, Direction, Dual, Line, Plane, Point3};
 use crate::visualization::SceneSelector;
-use crate::{Line, Plane, Point};
+
 use bevy::prelude::*;
 
 #[derive(Default)]
 pub struct PGAScene {
     pub name: &'static str,
-    pub points: Vec<Point>,
+    pub points: Vec<Point3>,
     pub lines: Vec<Line>,
     pub planes: Vec<Plane>,
     pub directions: Vec<Direction>,
@@ -46,20 +46,20 @@ impl PGAScene {
         "The projection of line L0 onto plane p0: p1 = L0 ^ p0.weight.dual; L1 = p0 & p1";
     /// Setup the initial scene with camera and lighting
     pub fn setup(mut scene_selector: ResMut<SceneSelector>) {
-        let p0 = Point::new(1.0, 0.0, 0.0);
-        let p1 = Point::new(0.0, 1.0, 0.0);
-        let p2 = Point::new(0.0, 0.0, 1.0);
+        let p0 = Point3::new(1.0, 0.0, 0.0);
+        let p1 = Point3::new(0.0, 1.0, 0.0);
+        let p2 = Point3::new(0.0, 0.0, 1.0);
 
         let p = [
-            Point::new(1.0, 1.0, 0.0),
-            Point::new(1.0, 0.0, 2.0),
-            Point::new(1.0, 2.0, 0.0),
-            Point::new(0.0, 2.0, 1.0),
-            Point::new(0.0, 2.0, 3.0),
-            Point::new(3.0, 2.0, 0.0),
-            Point::new(0.0, 1.0, 1.0),
-            Point::new(0.0, 3.0, 1.0),
-            Point::new(3.0, 0.0, 1.0),
+            Point3::new(1.0, 1.0, 0.0),
+            Point3::new(1.0, 0.0, 2.0),
+            Point3::new(1.0, 2.0, 0.0),
+            Point3::new(0.0, 2.0, 1.0),
+            Point3::new(0.0, 2.0, 3.0),
+            Point3::new(3.0, 2.0, 0.0),
+            Point3::new(0.0, 1.0, 1.0),
+            Point3::new(0.0, 3.0, 1.0),
+            Point3::new(3.0, 0.0, 1.0),
         ];
 
         let plane0 = p[0] ^ p[1] ^ p[2];
@@ -86,7 +86,7 @@ impl PGAScene {
             },
             PGAScene {
                 name: PGAScene::DIRECTIONS_AND_POINTS_JOIN_IN_A_LINE,
-                points: vec![Point::new(1.0, 1.0, 0.0)],
+                points: vec![Point3::new(1.0, 1.0, 0.0)],
                 lines: vec![Line::through_origin(0.0, 0.0, 0.0)],
                 planes: vec![],
                 directions: vec![Direction::new(0.0, 1.0, 0.0)],
@@ -134,7 +134,7 @@ impl PGAScene {
             },
             PGAScene {
                 name: PGAScene::THREE_PLANES_MEET_IN_A_POINT,
-                points: vec![Point::new(0.0, 0.0, 0.0)],
+                points: vec![Point3::new(0.0, 0.0, 0.0)],
                 lines: vec![],
                 planes: vec![plane0, plane1, plane2],
                 directions: vec![],
@@ -166,7 +166,7 @@ impl PGAScene {
             },
             PGAScene {
                 name: PGAScene::PLANE_PERP_THROUGH_POINT,
-                points: vec![Point::new(1.0, 0.0, 1.0), p1.clone(), p2.clone()],
+                points: vec![Point3::new(1.0, 0.0, 1.0), p1.clone(), p2.clone()],
                 lines: vec![p1 ^ p2],
                 planes: vec![Plane::new(1.0, 0.0, 0.0, 0.0)],
                 directions: vec![],
@@ -175,7 +175,7 @@ impl PGAScene {
             },
             PGAScene {
                 name: PGAScene::PROJECT_PLANE_ONTO_POINT,
-                points: vec![Point::new(1.0, 2.0, 3.0)],
+                points: vec![Point3::new(1.0, 2.0, 3.0)],
                 lines: vec![Line::through_origin(1.0, 0.0, 0.0)],
                 planes: vec![
                     Plane::new(-1.0, 1.0, 1.0, 1.0),
@@ -188,7 +188,7 @@ impl PGAScene {
             },
             PGAScene {
                 name: PGAScene::PROJECT_POINT_ONTO_PLANE,
-                points: vec![Point::new(0.0, 1.0, 0.0), Point::new(0.0, 0.0, 0.0)],
+                points: vec![Point3::new(0.0, 1.0, 0.0), Point3::new(0.0, 0.0, 0.0)],
                 lines: vec![],
                 planes: vec![Plane::new(-1.0, 1.0, 1.0, 1.0)],
                 directions: vec![],
@@ -257,7 +257,7 @@ impl PGAScene {
                 // Output
                 let line = p0 ^ p1;
                 scene.lines[0] = line;
-                scene.points[2] = line & plane0;
+                scene.points[2] = Point3::from(line & plane0);
             }
             PGAScene::TWO_PLANES_MEET_IN_A_LINE => {
                 let plane0 = scene.planes[0];
@@ -272,7 +272,7 @@ impl PGAScene {
                 let plane2 = scene.planes[2];
 
                 // Output
-                scene.points[0] = plane0 & plane1 & plane2;
+                scene.points[0] = Point3::from(plane0 & plane1 & plane2);
             }
             PGAScene::PLANE_PERP_THROUGH_LINE => {
                 let p0 = scene.points[0];
@@ -317,7 +317,7 @@ impl PGAScene {
 
                 // Output
                 let line = p0 ^ plane0.weight().dual();
-                scene.points[1] = plane0 & line;
+                scene.points[1] = Point3::from(plane0 & line);
             }
             PGAScene::PROJECT_LINE_ONTO_PLANE => {
                 let p0 = scene.points[0];

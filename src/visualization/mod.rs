@@ -16,7 +16,7 @@ use smooth_bevy_cameras::{
 
 mod scenes;
 
-use crate::pgai::{Direction, Line, Plane, Point};
+use crate::pgai::{BulkWeight, Direction, GeometricEntity, Line, Plane, Point3};
 use crate::visualization::scenes::PGAScene;
 
 #[derive(Default, Resource)]
@@ -62,7 +62,7 @@ struct PlaneMesh {
 }
 
 #[derive(Component)]
-struct PointVisual(Point);
+struct PointVisual(Point3);
 
 #[derive(Component)]
 struct LineVisual(Line);
@@ -71,7 +71,7 @@ struct LineVisual(Line);
 struct PlaneVisual(Plane);
 
 #[derive(Component)]
-struct DirectionVisual(Point);
+struct DirectionVisual(Direction);
 
 #[derive(Component)]
 struct LinkedLabel(Entity);
@@ -177,10 +177,9 @@ fn spawn_object(commands: &mut Commands, color: SceneColor, text: String) -> Ent
 }
 
 fn plane_transform(plane: &Plane) -> Transform {
-    let mut plane = plane.clone();
-    plane.unitize();
-    let distance = plane.w();
-    let normal = Vec3::from(plane.direction).normalize();
+    let plane = plane.unitize();
+    let distance = plane.w;
+    let normal = Vec3::from(plane.weight()).normalize();
     let rotation = Quat::from_rotation_arc(Vec3::Y, normal);
     Transform {
         translation: -normal * distance,
@@ -461,7 +460,7 @@ fn draw_pga_gizmos(
 
     // Draw points as small spheres
     for point in &scene.points {
-        let pos = point.project();
+        let pos = Vec3::from(*point);
         gizmos.sphere(pos, 0.01, SceneColor::WHITE.linear_rgba());
     }
 
@@ -483,27 +482,26 @@ fn draw_pga_gizmos(
 }
 
 fn pga_point_on_plane(plane: &Plane) -> Vec3 {
-    let plane = plane.unitized();
-    let w = plane.w();
+    let plane = plane.unitize();
 
-    if w.abs() < f32::EPSILON {
+    if plane.w.abs() < f32::EPSILON {
         // TODO: This should return None..., since the plane does not go through the origin.
         Vec3::ZERO // Ideal plane, no finite point
     } else {
-        let direction = Vec3::from(plane.direction);
-        direction * -w
+        let direction = Vec3::from(plane.weight());
+        direction * -plane.w
     }
 }
 
 fn pga_point_on_line(line: &Line) -> Vec3 {
-    let direction = line.direction;
+    let direction = line.weight();
     // If direction is zero, this is an ideal line (line at infinity)
     if direction.is_zero() {
         return Vec3::ZERO; // Ideal line, return origin as placeholder
     }
 
     let direction = Vec3::from(direction);
-    let moment = Vec3::from(line.moment);
+    let moment = Vec3::from(line.bulk());
     // Find a point on the line using the relationship: point = direction × moment / |direction|²
     let dir_length_sq = direction.length_squared();
     if dir_length_sq > f32::EPSILON {
@@ -520,14 +518,14 @@ fn pga_direction_to_vec3(direction: Direction) -> Vec3 {
 
 /// Draw a PGA line using gizmos
 fn draw_pga_line(gizmos: &mut Gizmos, line: &Line, color: LinearRgba) {
-    let direction = line.direction;
+    let direction = line.weight();
     // If direction is zero, this is an ideal line (line at infinity)
     if direction.is_zero() {
         return;
     }
     // Extract direction and moment components
     let direction = Vec3::from(direction);
-    let moment = Vec3::from(line.moment);
+    let moment = Vec3::from(line.bulk());
 
     // Find a point on the line using the relationship: point = direction × moment / |direction|²
     let dir_length_sq = direction.length_squared();
@@ -553,7 +551,7 @@ fn draw_pga_line(gizmos: &mut Gizmos, line: &Line, color: LinearRgba) {
 /// Draw just the normal arrow for a PGA plane (used when plane is drawn as mesh)
 fn draw_plane_normal_arrow(gizmos: &mut Gizmos, plane: &Plane, color: LinearRgba) {
     let point_on_plane = pga_point_on_plane(plane);
-    let normal = Vec3::from(plane.direction).normalize();
+    let normal = Vec3::from(plane.weight()).normalize();
 
     // Draw normal vector arrow
     gizmos.arrow(point_on_plane, point_on_plane + normal, color);
@@ -562,7 +560,7 @@ fn draw_plane_normal_arrow(gizmos: &mut Gizmos, plane: &Plane, color: LinearRgba
 /// Create a mesh and transform for a PGA plane
 fn create_plane_mesh(plane: &Plane) -> Mesh {
     let point_on_plane = pga_point_on_plane(plane);
-    let normal = Vec3::from(plane.direction).normalize();
+    let normal = Vec3::from(plane.weight()).normalize();
 
     // Create two orthogonal vectors in the plane
     let up = if normal.abs().dot(Vec3::Y) < 0.9 {
@@ -702,7 +700,7 @@ fn update_label_positions(
     };
 
     for (point, obj_entity) in scene.points.iter().zip(object_pool.points.iter()) {
-        update_position(*obj_entity, point.project());
+        update_position(*obj_entity, Vec3::from(*point));
     }
 
     for (line, obj_entity) in scene.lines.iter().zip(object_pool.lines.iter()) {
@@ -779,10 +777,10 @@ fn coordinate_editor_ui(
 
                 for i in 0..scene.input_point_count {
                     if let Some(point) = scene.points.get_mut(i) {
-                        let mut vec = point.project();
+                        let mut vec = Vec3::from(*point);
                         points_changed |= edit_vec3("Point P", ui, &mut vec, i);
                         if points_changed {
-                            *point = Point::new(vec[0], vec[1], vec[2]);
+                            *point = Point3::new(vec[0], vec[1], vec[2]);
                         }
                     }
                 }
