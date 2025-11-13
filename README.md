@@ -26,7 +26,6 @@ This project is a stab at creating a type safe geometric algebra library. It all
    let line: Line = p0 ^ p1;
    let plane: Plane = line ^ p2;
    let point4: Point4 = plane & line;
-   let point4: Point4 = plane & line;
    match point4.into() {
       PointOrDirection::Point(p) => {
             println!("Line and plane meet at finite point {:?}", p);
