@@ -3173,6 +3173,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "new-derive"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5673f370cc45fc9f70d7f98ff5fe7ad747adf9c3cbbaa7a571a987ad0758fa99"
+dependencies = [
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
 name = "nix"
 version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3682,6 +3692,8 @@ dependencies = [
  "bevy_egui",
  "console_error_panic_hook",
  "glam",
+ "new-derive",
+ "paste",
  "smooth-bevy-cameras",
  "wasm-bindgen",
  "web-sys",
